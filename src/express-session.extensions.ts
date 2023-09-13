@@ -13,3 +13,12 @@ declare module 'express-session' {
   }
 }
 export {};
+
+declare global {
+  namespace Express {
+    interface Request {
+      user_id?: string;
+      tenant_id?: string;
+    }
+  }
+}

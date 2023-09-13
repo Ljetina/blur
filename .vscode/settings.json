@@ -1,0 +1,7 @@
+{
+  "jest.enable": false,
+  "vitest.enable": true,
+  "vitest.nodeEnv": {
+    "NODE_ENV": "test"
+}
+}

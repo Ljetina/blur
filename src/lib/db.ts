@@ -32,7 +32,7 @@ export async function getUserByEmail(client: PoolClient, email: string) {
 }
 
 // {"id" : "2b802813-86f0-4130-a06b-7e1775350592", "email" : "bartol@ljetina.com", "name" : "Bartol Karuza", "ui_show_prompts" : true, "ui_show_conversations" : true, "selected_tenant_id" : "ec224ff1-0f67-4164-8d06-37692f134c3a", "conversations" : [{"id":"fef6c0e1-78fa-4858-8cd9-f2697c82adc0","document_id":null,"created_at":"2023-07-28T03:53:17.114691","updated_at":"2023-07-28T03:53:17.114691","folder_id":null,"name":"test","prompt":"test prompt","temperature":0.5,"model_id":"gpt-4","user_id":"2b802813-86f0-4130-a06b-7e1775350592","tenant_id":"ec224ff1-0f67-4164-8d06-37692f134c3a"}]}
-export async function initialServerData(tokenId: string) {
+export async function initialServerData(userId: string, tenantId: string) {
   const client = await getDbClient();
   const resp = await client.query(
     `
@@ -43,47 +43,40 @@ export async function initialServerData(tokenId: string) {
       'ui_show_prompts', users.ui_show_prompts,
       'ui_show_conversations', users.ui_show_conversations,
       'selected_tenant_id', users.selected_tenant_id,
-      'conversations', (SELECT json_agg(
-        json_build_object(
-                'id', cv.id,
-                'created_at', cv.created_at,
-                'updated_at', cv.updated_at,
-                'folder_id', cv.folder_id,
-                'name', cv.name,
-                'prompt', cv.prompt,
-                'temperature', cv.temperature,
-                'model_id', cv.model_id,
-                'message_count', (SELECT COUNT(*) FROM messages WHERE messages.conversation_id = cv.id AND role != \'system\'),
-                'messages', (SELECT json_agg(last_messages.*)
-                             FROM (SELECT *
-                                   FROM messages
-                                   WHERE messages.conversation_id = cv.id AND role != \'system\'
-                                   ORDER BY messages.created_at DESC
-                                   LIMIT 10) AS last_messages)
-            )
+      'conversations', 
+        (SELECT json_agg(
+          json_build_object(
+            'id', cv.id,
+            'created_at', cv.created_at,
+            'updated_at', cv.updated_at,
+            'folder_id', cv.folder_id,
+            'name', cv.name,
+            'prompt', cv.prompt,
+            'temperature', cv.temperature,
+            'model_id', cv.model_id,
+            'message_count', (SELECT COUNT(*) FROM messages WHERE messages.conversation_id = cv.id AND role != 'system'),
+            'messages', 
+              (SELECT json_agg(last_messages.*)
+               FROM (
+                 SELECT *
+                 FROM messages
+                 WHERE messages.conversation_id = cv.id AND role != 'system'
+                 ORDER BY messages.created_at DESC
+                 LIMIT 10
+               ) AS last_messages
+              )
+          )
+        )
+        FROM conversations cv
+        WHERE cv.user_id = $1
+        AND cv.tenant_id = $2
+      )
     )
-FROM conversations cv
-WHERE cv.user_id = users.id
-AND cv.tenant_id = users.selected_tenant_id),
-      'folders', (SELECT json_agg(
-                                 json_build_object(
-                                         'id', folders.id,
-                                         'name', folders.name
-                                     )
-                             )
-                  FROM folders
-                  WHERE folders.user_id = users.id
-                    AND folders.tenant_id = users.selected_tenant_id)
-  ) as user_with_conversations_and_folders
-FROM oauth_tokens
-JOIN
-users ON users.id = oauth_tokens.user_id
-WHERE oauth_tokens.id = $1
-GROUP BY users.id;`,
-    [tokenId]
+    FROM users
+    WHERE users.id = $1`,
+    [userId, tenantId]
   );
-  console.log(resp);
-  return resp.rows[0]['user_with_conversations_and_folders'];
+  return resp.rows[0]['json_build_object'];
 }
 
 export async function getMessages({

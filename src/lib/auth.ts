@@ -88,19 +88,6 @@ export function addAuthRoutes(app: Express) {
       res.send({ loggedOut: true });
     }
   });
-  app.post('/logout', (req, res) => {
-    req.session.destroy(async (err) => {
-      if (err) {
-        const client = await getDbClient();
-        // await client.query('
-        // ')
-        res.status(500).send({ loggedOut: false });
-      } else {
-        res.clearCookie('connect.sid'); // If you're using the default session cookie name
-        res.send({ loggedOut: true });
-      }
-    });
-  });
 }
 
 export function ensureAuthenticated(
@@ -195,3 +182,61 @@ export function makeGoogleStrategy() {
     }
   );
 }
+
+const testHandler = async (req: Request, res: Response, next: NextFunction) => {
+  if (req.headers['x-inject-user_id']) {
+    try {
+      req.user_id = req.headers['x-inject-user_id'] as string;
+      req.tenant_id = req.headers['x-inject-tenant_id'] as string;
+    } catch (err) {
+      console.error('Failed to parse X-Inject-Req-Variables header:', err);
+    }
+  }
+};
+
+export const authenticate = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  if (process.env.NODE_ENV == 'test') {
+    testHandler(req, res, next);
+    return next();
+  }
+  try {
+    // Check if user exists on the session
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const client = await getDbClient();
+    const user = req.session.user as SessionUser;
+    const oauthTokenQuery = 'SELECT user_id FROM oauth_tokens WHERE id = $1';
+    const oauthTokenValues = [user.id];
+    const oauthResult = await client.query(oauthTokenQuery, oauthTokenValues);
+
+    // Check if user_id exists for the OAuth token
+    if (oauthResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const userId = oauthResult.rows[0].user_id;
+    req.user_id = userId;
+
+    // Fetch selected_tenant_id for the user
+    const userQuery = 'SELECT selected_tenant_id FROM users WHERE id = $1';
+    const userValues = [userId];
+    const userResult = await client.query(userQuery, userValues);
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    req.tenant_id = userResult.rows[0].selected_tenant_id;
+
+    next();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
