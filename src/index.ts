@@ -9,11 +9,12 @@ import {
   handleUpdateConversation,
 } from './routes/conversation/conversation';
 import { handleUpdateUserPreferences } from './routes/user/user';
+import { morganMiddleware } from './lib/log';
 
 export const app = express();
 
 app.use(express.json());
-
+app.use(morganMiddleware)
 addAuthRoutes(app);
 app.get('/initial', authenticate, initialDataHandler);
 app.post('/conversation', authenticate, handleCreateConversation);
