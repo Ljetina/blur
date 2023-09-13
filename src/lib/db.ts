@@ -148,3 +148,22 @@ export async function loadPricing() {
   );
   return resp.rows;
 }
+
+export async function getFullConversation(conversationId: string): Promise<{
+  name: string;
+  prompt: string;
+  model_id: string;
+  messages: string;
+}> {
+  const client = await getDbClient();
+  const resp = await client.query(
+    `SELECT conversations.name, conversations.prompt, conversations.model_id, 
+  json_agg(json_build_object('id', messages.id, 'role', messages.role, 'content', messages.content, 'compressed_content', messages.compressed_content, 'name', messages.name)) AS messages
+FROM conversations
+LEFT JOIN messages ON messages.conversation_id = conversations.id
+WHERE conversations.id = $1
+GROUP BY conversations.id, conversations.name, conversations.prompt, conversations.model_id;`,
+    [conversationId]
+  );
+  return resp.rows[0];
+}

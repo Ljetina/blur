@@ -24,6 +24,8 @@ export const PassthroughStream = async (
     if (!res.ok) {
       throw new Error(`HTTP error! status: ${res.status}`);
     }
+
+    
   
     const stream = new ReadableStream({
       async start(controller) {
