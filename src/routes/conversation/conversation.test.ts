@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { app } from '../../index.js'; // Import your Express app
+import { prepareApp } from '../../app.js'; // Import your Express app
 import { describe, it, expect } from 'vitest';
 
 describe('PUT /conversation/:id', () => {
@@ -13,7 +13,7 @@ describe('PUT /conversation/:id', () => {
       model_id: 'new-model-id',
     };
 
-    const res = await request(app)
+    const res = await request(prepareApp())
       .put(`/conversation/${conversationId}`)
       .set('x-inject-user_id', '2b802813-86f0-4130-a06b-7e1775350592')
       .set('x-inject-tenant_id', 'ec224ff1-0f67-4164-8d06-37692f134c3a')

@@ -1,12 +1,11 @@
 import { Request, Response } from 'express';
-import { getDbClient } from '../../lib/db';
+import { getDbClient, withDbClient } from '../../lib/db';
 
 const handleCreateConversation = async (req: Request, res: Response) => {
   try {
-    const client = await getDbClient();
     const { folder_id, name, prompt, temperature, model_id } = req.body;
     const { user_id, tenant_id } = req;
-    console.log({b: req.body, user_id, tenant_id})
+    console.log({ b: req.body, user_id, tenant_id });
 
     const insertQuery = `
       INSERT INTO conversations (id, folder_id, name, prompt, temperature, model_id, user_id, tenant_id)
@@ -22,9 +21,9 @@ const handleCreateConversation = async (req: Request, res: Response) => {
       user_id,
       tenant_id,
     ];
-    console.log({insertValues})
-    const insertResult = await client.query(insertQuery, insertValues);
-    console.log({ insertResult });
+    const insertResult = await withDbClient(
+      async (client) => await client.query(insertQuery, insertValues)
+    );
 
     res.status(201).json({ ...insertResult.rows[0] });
   } catch (err) {
@@ -35,7 +34,6 @@ const handleCreateConversation = async (req: Request, res: Response) => {
 
 const handleDeleteConversation = async (req: Request, res: Response) => {
   try {
-    const client = await getDbClient();
     const { id } = req.params;
     const { user_id, tenant_id } = req;
 
@@ -44,7 +42,9 @@ const handleDeleteConversation = async (req: Request, res: Response) => {
       WHERE id = $1 AND user_id = $2 AND tenant_id = $3
     `;
     const deleteValues = [id, user_id, tenant_id];
-    const deleteResult = await client.query(deleteQuery, deleteValues);
+    const deleteResult = await withDbClient(
+      async (client) => await client.query(deleteQuery, deleteValues)
+    );
 
     if (deleteResult.rowCount === 0) {
       return res.status(404).json({ error: 'Conversation not found' });
@@ -59,7 +59,6 @@ const handleDeleteConversation = async (req: Request, res: Response) => {
 
 const handleUpdateConversation = async (req: Request, res: Response) => {
   try {
-    const client = await getDbClient();
     const { id } = req.params;
     const { folder_id, name, prompt, temperature, model_id } = req.body;
     const { user_id, tenant_id } = req;
@@ -73,7 +72,7 @@ const handleUpdateConversation = async (req: Request, res: Response) => {
 
     // Build query dynamically based on provided fields
     let updateQuery = 'UPDATE conversations SET ';
-    const updateValues = [];
+    const updateValues: any[] = [];
     let updateIndex = 1;
 
     const appendUpdateField = (fieldValue: any, fieldName: string) => {
@@ -98,7 +97,9 @@ const handleUpdateConversation = async (req: Request, res: Response) => {
     } AND tenant_id = $${updateIndex + 2}`;
     updateValues.push(id, user_id, tenant_id);
 
-    const updateResult = await client.query(updateQuery, updateValues);
+    const updateResult = await withDbClient(
+      async (client) => await client.query(updateQuery, updateValues)
+    );
 
     if (updateResult.rowCount === 0) {
       return res.status(404).json({ error: 'Conversation not found' });

@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GET /conversations/:id/messages > should return empty response 1`] = `"{\\"data\\":[],\\"pagination\\":{\\"total_pages\\":0,\\"total_records\\":0}}"`;
