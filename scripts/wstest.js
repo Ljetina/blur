@@ -5,6 +5,18 @@ ws.on('open', () => {
   ws.send(JSON.stringify({ action: 'create_message', text: 'Hello, server!' }));
 });
 ws.on('message', (message) => {
-  console.log(JSON.parse(message.toString('utf-8')));
-  ws.close();
+  const messageObj = JSON.parse(message.toString('utf-8'));
+  console.log(new Date());
+  console.log(messageObj);
+  if (messageObj.type === 'response_done') {
+    ws.close();
+  }
+});
+
+ws.on('close', () => {
+  console.log('closed');
+});
+
+ws.on('error', (e) => {
+  console.error(e);
 });
