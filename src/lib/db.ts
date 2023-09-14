@@ -1,5 +1,6 @@
 // import { pem } from './rdsPem';
 
+import { Message } from '@App/types/model';
 import { Pool, PoolClient } from 'pg';
 
 const pool = new Pool({
@@ -15,6 +16,17 @@ const pool = new Pool({
 
 export function getPool() {
   return pool;
+}
+
+export async function withDbClient<T>(
+  callback: (conn: PoolClient) => Promise<T>
+): Promise<T> {
+  const conn = await pool.connect();
+  try {
+    return await callback(conn);
+  } finally {
+    conn.release();
+  }
 }
 
 export async function getDbClient(): Promise<PoolClient> {
@@ -33,9 +45,10 @@ export async function getUserByEmail(client: PoolClient, email: string) {
 
 // {"id" : "2b802813-86f0-4130-a06b-7e1775350592", "email" : "bartol@ljetina.com", "name" : "Bartol Karuza", "ui_show_prompts" : true, "ui_show_conversations" : true, "selected_tenant_id" : "ec224ff1-0f67-4164-8d06-37692f134c3a", "conversations" : [{"id":"fef6c0e1-78fa-4858-8cd9-f2697c82adc0","document_id":null,"created_at":"2023-07-28T03:53:17.114691","updated_at":"2023-07-28T03:53:17.114691","folder_id":null,"name":"test","prompt":"test prompt","temperature":0.5,"model_id":"gpt-4","user_id":"2b802813-86f0-4130-a06b-7e1775350592","tenant_id":"ec224ff1-0f67-4164-8d06-37692f134c3a"}]}
 export async function initialServerData(userId: string, tenantId: string) {
-  const client = await getDbClient();
-  const resp = await client.query(
-    `
+  const resp = await withDbClient(
+    async (client) =>
+      await client.query(
+        `
     SELECT json_build_object(
       'id', users.id,
       'email', users.email,
@@ -74,7 +87,8 @@ export async function initialServerData(userId: string, tenantId: string) {
     )
     FROM users
     WHERE users.id = $1`,
-    [userId, tenantId]
+        [userId, tenantId]
+      )
   );
   return resp.rows[0]['json_build_object'];
 }
@@ -130,21 +144,25 @@ export async function getMessages({
 }
 
 export async function loadDemoConversation() {
-  const client = await getDbClient();
   const conversation_id = 'fef6c0e1-78fa-4858-8cd9-f2697c82adc0';
-  const resp = await client.query(
-    "SELECT * FROM messages WHERE conversation_id = $1 AND role != 'system' ORDER BY created_at ASC",
-    [conversation_id]
+  const resp = await withDbClient(
+    async (client) =>
+      await client.query(
+        "SELECT * FROM messages WHERE conversation_id = $1 AND role != 'system' ORDER BY created_at ASC",
+        [conversation_id]
+      )
   );
   return resp.rows;
 }
 
 export async function loadPricing() {
-  const client = await getDbClient();
   const conversation_id = 'ba08401a-4e6c-4b8c-a470-f4cacda7f79f';
-  const resp = await client.query(
-    "SELECT * FROM messages WHERE conversation_id = $1 AND role != 'system' ORDER BY created_at ASC",
-    [conversation_id]
+  const resp = await withDbClient(
+    async (client) =>
+      await client.query(
+        "SELECT * FROM messages WHERE conversation_id = $1 AND role != 'system' ORDER BY created_at ASC",
+        [conversation_id]
+      )
   );
   return resp.rows;
 }
@@ -153,17 +171,72 @@ export async function getFullConversation(conversationId: string): Promise<{
   name: string;
   prompt: string;
   model_id: string;
-  messages: string;
+  messages: Message[];
 }> {
-  const client = await getDbClient();
-  const resp = await client.query(
-    `SELECT conversations.name, conversations.prompt, conversations.model_id, 
-  json_agg(json_build_object('id', messages.id, 'role', messages.role, 'content', messages.content, 'compressed_content', messages.compressed_content, 'name', messages.name)) AS messages
-FROM conversations
-LEFT JOIN messages ON messages.conversation_id = conversations.id
-WHERE conversations.id = $1
-GROUP BY conversations.id, conversations.name, conversations.prompt, conversations.model_id;`,
-    [conversationId]
+  const resp = await withDbClient(
+    async (client) =>
+      await client.query(
+        `SELECT conversations.id, conversations.name, conversations.prompt, conversations.model_id, 
+    COALESCE(
+      json_agg(
+        CASE 
+          WHEN messages.id IS NOT NULL THEN json_build_object('id', messages.id, 'role', messages.role, 'content', messages.content, 'compressed_content', messages.compressed_content, 'name', messages.name)
+        END
+      ) FILTER (WHERE messages.id IS NOT NULL), 
+      '[]'
+    ) AS messages
+  FROM conversations
+  LEFT JOIN messages ON messages.conversation_id = conversations.id
+  WHERE conversations.id = $1
+  GROUP BY conversations.id, conversations.name, conversations.prompt, conversations.model_id;`,
+        [conversationId]
+      )
+  );
+  return resp.rows[0];
+}
+
+export async function storeMessage({
+  conversation_id,
+  message_id,
+  role,
+  message_content,
+  compressed_content = null,
+  name = null,
+}: {
+  conversation_id: string;
+  message_id?: string;
+  role: string;
+  message_content: string;
+  compressed_content?: string | null;
+  name?: string | null;
+}) {
+  const values = [
+    conversation_id,
+    role,
+    message_content,
+    compressed_content,
+    name,
+  ];
+  if (message_id) {
+    values.push(message_id);
+  }
+  const resp = await withDbClient(
+    async (client) =>
+      await client.query(
+        `
+    WITH conversation_data AS (
+        SELECT user_id, tenant_id
+        FROM conversations
+        WHERE id = $1
+    )
+    INSERT INTO messages (id, role, content, compressed_content, conversation_id, name, user_id, tenant_id, created_at, updated_at)
+    VALUES (${
+      message_id ? '$6' : 'uuid_generate_v4()'
+    }, $2, $3, $4, $1, $5, (SELECT user_id FROM conversation_data), (SELECT tenant_id FROM conversation_data), NOW(), NOW())
+    RETURNING *;
+    `,
+        values
+      )
   );
   return resp.rows[0];
 }

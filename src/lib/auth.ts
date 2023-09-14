@@ -3,11 +3,10 @@ import { Express, NextFunction, Request, Response } from 'express';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import session from 'express-session';
 import cors from 'cors';
-// import { PGStore } from 'connect-pg-simple';
 import { default as connectPgSimple } from 'connect-pg-simple';
 const PGStore = connectPgSimple(session);
 
-import { getDbClient, getPool, getUserByEmail } from './db';
+import { withDbClient, getPool, getUserByEmail, getDbClient } from './db';
 import { SessionUser } from '../express-session.extensions';
 
 export function addAuthRoutes(app: Express) {
@@ -75,11 +74,10 @@ export function addAuthRoutes(app: Express) {
         if (err) {
           res.status(500).send({ loggedOut: false });
         } else {
-          const client = await getDbClient();
-          // Using req.user.id to get the oauth token id
-          await client.query('DELETE FROM oauth_tokens WHERE id = $1', [
-            tokenId,
-          ]);
+          await withDbClient(async (c) => {
+            await c.query('DELETE FROM oauth_tokens WHERE id = $1', [tokenId]);
+          });
+
           res.clearCookie('connect.sid'); // If you're using the default session cookie name
           res.send({ loggedOut: true });
         }
@@ -88,20 +86,6 @@ export function addAuthRoutes(app: Express) {
       res.send({ loggedOut: true });
     }
   });
-}
-
-export function ensureAuthenticated(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  if (req.session.user) {
-    // User is authenticated, proceed to the next middleware function or the route handler
-    next();
-  } else {
-    // User is not authenticated, send an error response
-    res.status(401).json({ message: 'Unauthorized' });
-  }
 }
 
 export function makeGoogleStrategy() {
@@ -209,11 +193,12 @@ export const authenticate = async (
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const client = await getDbClient();
     const user = req.session.user as SessionUser;
     const oauthTokenQuery = 'SELECT user_id FROM oauth_tokens WHERE id = $1';
     const oauthTokenValues = [user.id];
-    const oauthResult = await client.query(oauthTokenQuery, oauthTokenValues);
+    const oauthResult = await withDbClient(
+      async (c) => await c.query(oauthTokenQuery, oauthTokenValues)
+    );
 
     // Check if user_id exists for the OAuth token
     if (oauthResult.rows.length === 0) {
@@ -226,7 +211,9 @@ export const authenticate = async (
     // Fetch selected_tenant_id for the user
     const userQuery = 'SELECT selected_tenant_id FROM users WHERE id = $1';
     const userValues = [userId];
-    const userResult = await client.query(userQuery, userValues);
+    const userResult = await withDbClient(
+      async (c) => await c.query(userQuery, userValues)
+    );
 
     if (userResult.rows.length === 0) {
       return res.status(401).json({ error: 'Unauthorized' });

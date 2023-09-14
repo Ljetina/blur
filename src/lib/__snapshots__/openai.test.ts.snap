@@ -1,0 +1,251 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`prepare messages > returns the expected data 1`] = `
+{
+  "conversation": {
+    "id": "488f3c07-1f94-4c48-b124-d0c57ea3cdc6",
+    "messages": [
+      {
+        "compressed_content": null,
+        "content": "Hello! How can I assist you today?",
+        "id": "5269f7a8-b550-45f2-893c-07bacc5e6110",
+        "name": null,
+        "role": "system",
+      },
+      {
+        "compressed_content": null,
+        "content": "hey how you doin?",
+        "id": "3761d25b-b042-4b7c-bc47-1361f50535c9",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "I'm an AI, so I don't have feelings, but I'm here and ready to help you. What can I assist you with today?",
+        "id": "1615846a-c31f-406c-a161-e78a8de98c0d",
+        "name": null,
+        "role": "assistant",
+      },
+      {
+        "compressed_content": null,
+        "content": "Hello! I'm here and ready. What would you like to test or know?",
+        "id": "9abae857-1d4b-4106-a218-e24408e39782",
+        "name": null,
+        "role": "assistant",
+      },
+      {
+        "compressed_content": null,
+        "content": "test",
+        "id": "c9490dfd-9301-4fb9-bb1d-62b6a9dd861e",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "Sure, I'm here to help. What specifically would you like to test?",
+        "id": "d44199a1-1246-40b0-9427-5323618b1000",
+        "name": null,
+        "role": "assistant",
+      },
+      {
+        "compressed_content": null,
+        "content": "test",
+        "id": "33a6301a-ad0a-43c2-a73d-2e5b4d95631f",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "test",
+        "id": "8eb9c67c-07cc-44d6-b7e6-8603e8b554ea",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "Alright, let's proceed with the test. Can you please specify what we're testing?",
+        "id": "01476741-71ef-4aa5-a805-d6c1be705090",
+        "name": null,
+        "role": "assistant",
+      },
+      {
+        "compressed_content": null,
+        "content": "Hello! I'm here to assist you. Could you please specify what kind of test you are referring to?",
+        "id": "429ee4f2-8362-48c7-8069-4ef3366bb284",
+        "name": null,
+        "role": "assistant",
+      },
+      {
+        "compressed_content": null,
+        "content": "test",
+        "id": "0d900163-1681-467c-bcd9-3a680df63241",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "I'm ready to assist you. Could you please provide more details about the test you need help with?",
+        "id": "5dd98782-46f4-47f5-a8b0-b0560e720254",
+        "name": null,
+        "role": "assistant",
+      },
+      {
+        "compressed_content": null,
+        "content": "test",
+        "id": "2575cd6a-d0a6-412d-9664-0af35fb7f70e",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "this seems to work well",
+        "id": "b86b5407-8200-461b-ab20-500dbd9edae6",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "I'm glad to hear that you think so! If you have any other questions or need further assistance, feel free to ask.",
+        "id": "3a1d1d7a-5fdf-4083-837c-5043352291ff",
+        "name": null,
+        "role": "assistant",
+      },
+      {
+        "compressed_content": null,
+        "content": "As an AI, I don't have the capability to monitor or interact with the Document Object Model (DOM) directly. However, I'd be glad to assist you with any queries or problems you might have related to web development or any other topic. Please share more details!",
+        "id": "1d4d021e-e615-4dc1-b10e-adc5dae4642e",
+        "name": null,
+        "role": "assistant",
+      },
+      {
+        "compressed_content": null,
+        "content": "let's look at the dom updates as your brilliance rolls in",
+        "id": "188f4fd6-3ffd-442d-aa77-7a064d9a851c",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "you're doing it by just thinking and sending me those updates",
+        "id": "07de47b6-ca85-4b9f-b638-5e0e2cdcbd1a",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "As an AI, I don't have personal experiences or thoughts. Instead, I provide information and perform tasks based on my programming and the data I have access to. If you have any questions or need assistance with something, feel free to ask!",
+        "id": "1845b251-a3b7-4ce0-841d-d8adfcd3b2d4",
+        "name": null,
+        "role": "assistant",
+      },
+      {
+        "compressed_content": null,
+        "content": "I know I know, I'm just testing a UI that this is displayed on and making small talk",
+        "id": "b683cee4-5e6d-472f-97c1-1f9023820dd1",
+        "name": null,
+        "role": "user",
+      },
+      {
+        "compressed_content": null,
+        "content": "That sounds interesting! If you need any assistance or have any questions while testing your UI, feel free to ask. I'm here to help. And, of course, I'm always up for small talk!",
+        "id": "ca34bb88-d945-4af4-99e2-1f5a50706aa7",
+        "name": null,
+        "role": "assistant",
+      },
+    ],
+    "model_id": "gpt-4",
+    "name": "test",
+    "prompt": "test",
+  },
+  "messages": [
+    {
+      "content": "Hello! How can I assist you today?",
+      "role": "system",
+    },
+    {
+      "content": "hey how you doin?",
+      "role": "user",
+    },
+    {
+      "content": "I'm an AI, so I don't have feelings, but I'm here and ready to help you. What can I assist you with today?",
+      "role": "assistant",
+    },
+    {
+      "content": "Hello! I'm here and ready. What would you like to test or know?",
+      "role": "assistant",
+    },
+    {
+      "content": "test",
+      "role": "user",
+    },
+    {
+      "content": "Sure, I'm here to help. What specifically would you like to test?",
+      "role": "assistant",
+    },
+    {
+      "content": "test",
+      "role": "user",
+    },
+    {
+      "content": "test",
+      "role": "user",
+    },
+    {
+      "content": "Alright, let's proceed with the test. Can you please specify what we're testing?",
+      "role": "assistant",
+    },
+    {
+      "content": "Hello! I'm here to assist you. Could you please specify what kind of test you are referring to?",
+      "role": "assistant",
+    },
+    {
+      "content": "test",
+      "role": "user",
+    },
+    {
+      "content": "I'm ready to assist you. Could you please provide more details about the test you need help with?",
+      "role": "assistant",
+    },
+    {
+      "content": "test",
+      "role": "user",
+    },
+    {
+      "content": "this seems to work well",
+      "role": "user",
+    },
+    {
+      "content": "I'm glad to hear that you think so! If you have any other questions or need further assistance, feel free to ask.",
+      "role": "assistant",
+    },
+    {
+      "content": "As an AI, I don't have the capability to monitor or interact with the Document Object Model (DOM) directly. However, I'd be glad to assist you with any queries or problems you might have related to web development or any other topic. Please share more details!",
+      "role": "assistant",
+    },
+    {
+      "content": "let's look at the dom updates as your brilliance rolls in",
+      "role": "user",
+    },
+    {
+      "content": "you're doing it by just thinking and sending me those updates",
+      "role": "user",
+    },
+    {
+      "content": "As an AI, I don't have personal experiences or thoughts. Instead, I provide information and perform tasks based on my programming and the data I have access to. If you have any questions or need assistance with something, feel free to ask!",
+      "role": "assistant",
+    },
+    {
+      "content": "I know I know, I'm just testing a UI that this is displayed on and making small talk",
+      "role": "user",
+    },
+    {
+      "content": "That sounds interesting! If you need any assistance or have any questions while testing your UI, feel free to ask. I'm here to help. And, of course, I'm always up for small talk!",
+      "role": "assistant",
+    },
+    {
+      "content": "testQuery",
+      "role": "user",
+    },
+  ],
+}
+`;

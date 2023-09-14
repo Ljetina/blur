@@ -2,6 +2,7 @@ import https from 'node:https';
 import { getFullConversation } from './db';
 import { Message } from '@App/types/model';
 import { tokenLimitConversationHistory } from './token';
+import { SERVER_ACTION } from '@App/types/ws_actions';
 
 const options = {
   hostname: 'api.openai.com',
@@ -14,23 +15,24 @@ const options = {
   },
 };
 
+interface Choice {
+  index: number;
+  delta?: {
+    role?: 'system' | 'user' | 'assistant';
+    content?: string | null;
+    function_call?: {
+      name: string;
+      arguments: string;
+    };
+  };
+  finish_reason: string | null;
+}
 interface Chunk {
   id: string;
   object: 'chat.completion.chunk';
   created: number;
   model: 'string';
-  choices: {
-    index: number;
-    delta?: {
-      role: 'system' | 'user' | 'assistant';
-      content: 'string' | null;
-      function_call?: {
-        name: string;
-        arguments: string;
-      };
-    };
-    finish_reason: string | null;
-  }[];
+  choices?: Choice[];
 }
 
 interface Function {
@@ -39,20 +41,79 @@ interface Function {
   parameters: object;
 }
 
-export async function streamCompletion(conversationId: string) {
-  const { messages, conversation } = await prepareMessages(conversationId);
+export const makeChoiceHandler = (
+  onEvent: (type: SERVER_ACTION, payload?: any) => void
+) => {
+  const acc: { name: string | null; arguments: string; content: '' } = {
+    name: null,
+    arguments: '',
+    content: '',
+  };
+  return (c: Choice) => {
+    if (c.delta && c.delta.function_call) {
+      // Function handling
+      if (c.finish_reason) {
+        const functionName = acc.name || c.delta.function_call.name;
+        const functionArguments =
+          acc.arguments + c.delta.function_call.arguments;
+        if (functionName && functionArguments) {
+          onEvent('start_function', { functionName, functionArguments });
+        }
+        acc.name = null;
+        acc.arguments = '';
+      } else {
+        const delta = c.delta;
+        if (delta.function_call && delta.function_call.name) {
+          acc.name = delta.function_call.name;
+        }
+        if (delta.function_call && delta.function_call.arguments) {
+          acc.arguments += delta.function_call.arguments;
+        }
+      }
+    } else if (c.delta && !c.delta?.function_call) {
+      // Message delta handling
+      if (c.finish_reason) {
+        onEvent('response_done', acc.content);
+        acc.content = '';
+      } else {
+        acc.content += c.delta.content;
+        onEvent('append_to_message', c.delta.content);
+      }
+    }
+  };
+};
 
-  startCompletion({
-    model: conversation.model_id as 'gpt-4' | 'gpt-3.5-turbo',
-    messages: messages,
-    onChunk: (c) => console.log(c),
-    // onChunk:
-  })
-    .then(() => {})
-    .catch(() => {});
+export async function streamCompletion(
+  conversationId: string,
+  query: string,
+  onEvent: (type: SERVER_ACTION, payload: any) => void
+) {
+  const { messages, conversation } = await prepareMessages(
+    conversationId,
+    query
+  );
+  console.log({ messages });
+  const choiceHandler = makeChoiceHandler(onEvent);
+  return new Promise((resolve, reject) => {
+    startCompletion({
+      model: conversation.model_id as 'gpt-4' | 'gpt-3.5-turbo',
+      messages: messages,
+      onChunk: (c: Chunk) => {
+        if (c.choices && c.choices.length > 0) {
+          const choice = c.choices[0];
+          choiceHandler(choice);
+        }
+      },
+    })
+      .then(resolve)
+      .catch(reject);
+  });
 }
 
-async function prepareMessages(conversationId: string): Promise<{
+export async function prepareMessages(
+  conversationId: string,
+  query: string
+): Promise<{
   messages: Message[];
   conversation: { model_id: string; prompt: string; name?: string | undefined };
 }> {
@@ -71,18 +132,7 @@ async function prepareMessages(conversationId: string): Promise<{
     tokenSimilarBudget = 500;
   }
 
-  let messages: Message[] = JSON.parse(conversation.messages);
-
-  const getMessageDict = (m: Message): Message => {
-    const d: Message = {
-      role: m.role,
-      content: m.content || m.content, // replace with actual compressed content condition
-    };
-    if (m.role === 'function') {
-      d.name = m.name;
-    }
-    return d;
-  };
+  let messages: Message[] = conversation.messages as Message[];
 
   if (!messages.some((message) => message.role === 'system')) {
     // If not, prepend the system message
@@ -91,12 +141,18 @@ async function prepareMessages(conversationId: string): Promise<{
     ).concat(messages);
   }
 
-  // Convert message objects to dictionaries
-  messages = messages.map(getMessageDict);
-
-  console.log('m', messages);
+  messages = messages.map((m: Message): Message => {
+    const d: Message = {
+      role: m.role,
+      content: m.compressed_content || m.content,
+    };
+    if (m.role === 'function') {
+      d.name = m.name;
+    }
+    return d;
+  });
+  messages.push({ role: 'user', content: query });
   messages = tokenLimitConversationHistory(messages, tokenConversationBudget);
-  // messages = queryVectorDb(messages, tokenSimilarBudget);
 
   return { messages, conversation };
 }
