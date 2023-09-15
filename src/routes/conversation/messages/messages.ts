@@ -14,7 +14,7 @@ export async function handleMessages(req: Request, res: Response) {
     SELECT id, role, content, conversation_id, created_at, updated_at
     FROM messages
     WHERE user_id = $1 AND tenant_id = $2 AND conversation_id = $3 AND role != 'system'
-    ORDER BY created_at DESC
+    ORDER BY created_at ASC
     LIMIT $4 OFFSET $5;
 `;
 

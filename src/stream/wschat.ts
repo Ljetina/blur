@@ -1,10 +1,9 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import url from 'url';
 import { v4 as uuidv4 } from 'uuid';
-// import { PassthroughStream } from '@App/lib/passthroughStream';
 import { SERVER_ACTION, USER_ACTION } from '@App/types/ws_actions';
 import { streamCompletion } from '../lib/openai';
-import { storeMessage } from '../lib/db';
+import { storeMessage, storeMessages } from '../lib/db';
 
 export function startWsServer() {
   const wss = new WebSocketServer({
@@ -67,19 +66,19 @@ export function startWsServer() {
                 // todo store message
                 ws.send(makeResponse(type));
                 console.log({ payload });
-                await Promise.all([
-                  storeMessage({
+                await storeMessages([
+                  {
                     conversation_id: conversationId,
                     message_id: userUuid,
                     role: 'user',
                     message_content: text,
-                  }),
-                  storeMessage({
+                  },
+                  {
                     conversation_id: conversationId,
                     message_id: assistantUuid,
                     role: 'assistant',
                     message_content: payload,
-                  }),
+                  },
                 ]);
               }
             }

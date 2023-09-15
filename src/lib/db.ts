@@ -195,6 +195,15 @@ export async function getFullConversation(conversationId: string): Promise<{
   return resp.rows[0];
 }
 
+interface InputMessage {
+  conversation_id: string;
+  message_id?: string;
+  role: string;
+  message_content: string;
+  compressed_content?: string | null;
+  name?: string | null;
+}
+
 export async function storeMessage({
   conversation_id,
   message_id,
@@ -202,14 +211,7 @@ export async function storeMessage({
   message_content,
   compressed_content = null,
   name = null,
-}: {
-  conversation_id: string;
-  message_id?: string;
-  role: string;
-  message_content: string;
-  compressed_content?: string | null;
-  name?: string | null;
-}) {
+}: InputMessage) {
   const values = [
     conversation_id,
     role,
@@ -239,4 +241,51 @@ export async function storeMessage({
       )
   );
   return resp.rows[0];
+}
+
+export async function storeMessages(messages: InputMessage[]) {
+  const params: (string | null | undefined)[] = [messages[0].conversation_id];
+  const chunks: any[] = [];
+
+  messages.forEach((message, index) => {
+    const paramIndex = index * 5 + 2;
+    params.push(
+      message.role,
+      message.message_content,
+      message.compressed_content || null,
+      message.name || null,
+      message.message_id
+    );
+    chunks.push(`(
+      $${paramIndex + 4},
+      $1,
+      $${paramIndex},
+      $${paramIndex + 1},
+      $${paramIndex + 2},
+      $${paramIndex + 3},
+      (SELECT user_id FROM conversation_data),
+      (SELECT tenant_id FROM conversation_data),
+      NOW() + '${index} seconds'::interval,
+      NOW() + '${index} seconds'::interval
+    )`);
+  });
+
+  const sql = `
+  WITH conversation_data AS (
+    SELECT user_id, tenant_id
+    FROM conversations
+    WHERE id = $1
+  )
+  INSERT INTO messages (id, conversation_id, role, content, compressed_content, name, user_id, tenant_id, created_at, updated_at)
+  VALUES ${chunks.join(',')}
+  RETURNING *;
+`;
+
+  // console.log({ sql, params });
+
+  const resp = await withDbClient(
+    async (client) => await client.query(sql, params)
+  );
+
+  return resp.rows;
 }
