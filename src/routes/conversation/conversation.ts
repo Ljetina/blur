@@ -25,7 +25,7 @@ const handleCreateConversation = async (req: Request, res: Response) => {
       async (client) => await client.query(insertQuery, insertValues)
     );
 
-    res.status(201).json({ ...insertResult.rows[0] });
+    res.status(201).json({ ...insertResult.rows[0], message_count: 0 });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

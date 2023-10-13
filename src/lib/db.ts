@@ -56,6 +56,12 @@ export async function initialServerData(userId: string, tenantId: string) {
       'ui_show_prompts', users.ui_show_prompts,
       'ui_show_conversations', users.ui_show_conversations,
       'selected_tenant_id', users.selected_tenant_id,
+      'jupyter_settings', json_build_object(
+        'host', coalesce(jupyter_settings.host, ''),
+        'port', coalesce(jupyter_settings.port, ''),
+        'token', coalesce(jupyter_settings.token, ''),
+        'notebooks_folder_path', coalesce(jupyter_settings.notebooks_folder_path, '')
+      ),
       'conversations', 
         (SELECT json_agg(
           json_build_object(
@@ -86,6 +92,7 @@ export async function initialServerData(userId: string, tenantId: string) {
       )
     )
     FROM users
+    LEFT JOIN jupyter_settings ON users.id = jupyter_settings.user_id
     WHERE users.id = $1`,
         [userId, tenantId]
       )

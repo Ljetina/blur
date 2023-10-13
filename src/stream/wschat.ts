@@ -35,8 +35,8 @@ export function startWsServer() {
     console.log('ws connection opened');
     // Parse the URL to get the conversation ID
     const pathName = url.parse(req.url).pathname;
-    // const conversationId = pathName?.split('/').pop();
-    const conversationId: string = '488f3c07-1f94-4c48-b124-d0c57ea3cdc6';
+    const conversationId = pathName?.split('/').pop() as string;
+    // const conversationId: string = '488f3c07-1f94-4c48-b124-d0c57ea3cdc6';
 
     ws.on('close', (code, reason) => {
       console.log(
@@ -80,6 +80,7 @@ export function startWsServer() {
                     message_content: payload,
                   },
                 ]);
+                // await Promise.all([]);
               }
             }
           );

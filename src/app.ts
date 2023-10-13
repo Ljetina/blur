@@ -13,6 +13,11 @@ import { morganMiddleware } from './lib/log';
 import { handleWaitingList } from './routes/waitinglist/waitinglist';
 import { handleMessages } from './routes/conversation/messages/messages';
 import { handleDemoConversation, handleDemoPricing } from './routes/demo/demo';
+import {
+  handleGetConversationNotebookSettings,
+  handleUpsertConversationNotebook,
+} from './routes/conversation/notebook/notebook';
+import { handleCreateUserNotebook } from './routes/user/notebook/notebook';
 
 export function prepareApp() {
   const app = express();
@@ -25,8 +30,20 @@ export function prepareApp() {
   app.delete('/conversation/:id', authenticate, handleDeleteConversation);
   app.put('/conversation/:id', authenticate, handleUpdateConversation);
   app.get('/conversation/:id/message', authenticate, handleMessages);
+  app.post(
+    '/conversation/:id/notebook',
+    authenticate,
+    handleUpsertConversationNotebook
+  );
+  app.get(
+    '/conversation/:id/notebook',
+    authenticate,
+    handleGetConversationNotebookSettings
+  );
   app.put('/user', authenticate, handleUpdateUserPreferences);
+  app.post('/user/notebook', authenticate, handleCreateUserNotebook);
   app.post('/waitinglist', handleWaitingList);
+
   app.get('/demo/main', handleDemoConversation);
   app.get('/demo/pricing', handleDemoPricing);
 

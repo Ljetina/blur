@@ -3,7 +3,8 @@ import { Request, Response } from 'express';
 
 export async function handleMessages(req: Request, res: Response) {
   const { user_id, tenant_id } = req;
-  const { id, page, limit } = req.params;
+  const { id } = req.params;
+  const { page, limit } = req.query;
 
   const resolvedPage = Number(page || 1);
   const resolvedLimit = Number(limit || 50);
@@ -14,7 +15,7 @@ export async function handleMessages(req: Request, res: Response) {
     SELECT id, role, content, conversation_id, created_at, updated_at
     FROM messages
     WHERE user_id = $1 AND tenant_id = $2 AND conversation_id = $3 AND role != 'system'
-    ORDER BY created_at ASC
+    ORDER BY created_at DESC
     LIMIT $4 OFFSET $5;
 `;
 
@@ -37,8 +38,8 @@ export async function handleMessages(req: Request, res: Response) {
   const responseBody = {
     data: result.rows,
     pagination: {
-      current_page: page,
-      per_page: limit,
+      current_page: resolvedPage,
+      per_page: resolvedLimit,
       total_pages: Math.ceil(totalRecords / resolvedLimit),
       total_records: totalRecords,
     },

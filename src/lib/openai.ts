@@ -92,7 +92,6 @@ export async function streamCompletion(
     conversationId,
     query
   );
-  console.log({ messages });
   const choiceHandler = makeChoiceHandler(onEvent);
   return new Promise((resolve, reject) => {
     startCompletion({
