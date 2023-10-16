@@ -3,7 +3,9 @@ export type USER_ACTION =
   | 'edit_message'
   | 'confirm'
   | 'reject'
-  | 'reload';
+  | 'reload'
+  | 'frontend_function_result'
+  | 'notebook_updated';
 
 export type SERVER_ACTION =
   | 'message_ack'
@@ -11,4 +13,6 @@ export type SERVER_ACTION =
   | 'request_confirm'
   | 'response_done'
   | 'start_function'
-  | 'function_result';
+  | 'start_frontend_function'
+  | 'function_result'
+  | 'response_error';

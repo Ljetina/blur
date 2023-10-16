@@ -1,6 +1,6 @@
 // import { pem } from './rdsPem';
 
-import { Message } from '@App/types/model';
+import { FullConversation, Message } from '@App/types/model';
 import { Pool, PoolClient } from 'pg';
 
 const pool = new Pool({
@@ -86,9 +86,12 @@ export async function initialServerData(userId: string, tenantId: string) {
               )
           )
         )
-        FROM conversations cv
-        WHERE cv.user_id = $1
-        AND cv.tenant_id = $2
+        FROM (
+          SELECT *
+          FROM conversations
+          WHERE user_id = $1 AND tenant_id = $2
+          ORDER BY created_at ASC
+        ) AS cv
       )
     )
     FROM users
@@ -174,39 +177,64 @@ export async function loadPricing() {
   return resp.rows;
 }
 
-export async function getFullConversation(conversationId: string): Promise<{
-  name: string;
-  prompt: string;
-  model_id: string;
-  messages: Message[];
-}> {
+export async function getFullConversationAndNotebook(
+  conversationId: string
+): Promise<FullConversation> {
   const resp = await withDbClient(
     async (client) =>
       await client.query(
-        `SELECT conversations.id, conversations.name, conversations.prompt, conversations.model_id, 
-    COALESCE(
-      json_agg(
-        CASE 
-          WHEN messages.id IS NOT NULL THEN json_build_object('id', messages.id, 'role', messages.role, 'content', messages.content, 'compressed_content', messages.compressed_content, 'name', messages.name)
-        END
-      ) FILTER (WHERE messages.id IS NOT NULL), 
-      '[]'
-    ) AS messages
-  FROM conversations
-  LEFT JOIN messages ON messages.conversation_id = conversations.id
-  WHERE conversations.id = $1
-  GROUP BY conversations.id, conversations.name, conversations.prompt, conversations.model_id;`,
+        `SELECT 
+          conversations.id, 
+          conversations.name, 
+          conversations.prompt, 
+          conversations.model_id, 
+          COALESCE(
+            json_agg(
+              CASE 
+                WHEN messages.id IS NOT NULL THEN json_build_object(
+                  'id', messages.id, 
+                  'role', messages.role, 
+                  'content', messages.content, 
+                  'compressed_content', messages.compressed_content, 
+                  'function_name', messages.function_name,
+                  'function_arguments', messages.function_arguments,
+                  'name', messages.name
+                  )
+              END
+            ) FILTER (WHERE messages.id IS NOT NULL), 
+            '[]'
+          ) AS messages,
+          conversation_notebook.notebook_path AS notebook_path, 
+          conversation_notebook.notebook_name AS notebook_name, 
+          conversation_notebook.session_id AS session_id, 
+          conversation_notebook.kernel_id AS kernel_id
+        FROM conversations
+        LEFT JOIN messages ON messages.conversation_id = conversations.id
+        LEFT JOIN conversation_notebook ON conversation_notebook.conversation_id = conversations.id
+        WHERE conversations.id = $1
+        GROUP BY conversations.id, conversations.name, conversations.prompt, conversations.model_id, conversation_notebook.notebook_path, conversation_notebook.notebook_name, conversation_notebook.session_id, conversation_notebook.kernel_id;`,
         [conversationId]
       )
   );
-  return resp.rows[0];
+  const row = resp.rows[0];
+  return {
+    ...row,
+    notebook: {
+      path: row.notebook_path,
+      name: row.notebook_name,
+      session_id: row.session_id,
+      kernel_id: row.kernel_id,
+    },
+  };
 }
 
-interface InputMessage {
+export interface InputMessage {
   conversation_id: string;
   message_id?: string;
   role: string;
-  message_content: string;
+  message_content?: string;
+  function_name?: string;
+  function_arguments?: string;
   compressed_content?: string | null;
   name?: string | null;
 }
@@ -255,25 +283,29 @@ export async function storeMessages(messages: InputMessage[]) {
   const chunks: any[] = [];
 
   messages.forEach((message, index) => {
-    const paramIndex = index * 5 + 2;
+    const paramIndex = index * 7 + 2;
     params.push(
       message.role,
       message.message_content,
+      message.function_name,
+      message.function_arguments,
       message.compressed_content || null,
       message.name || null,
       message.message_id
     );
     chunks.push(`(
-      $${paramIndex + 4},
+      $${paramIndex + 6},
       $1,
       $${paramIndex},
       $${paramIndex + 1},
       $${paramIndex + 2},
       $${paramIndex + 3},
+      $${paramIndex + 4},
+      $${paramIndex + 5},
       (SELECT user_id FROM conversation_data),
       (SELECT tenant_id FROM conversation_data),
-      NOW() + '${index} seconds'::interval,
-      NOW() + '${index} seconds'::interval
+      NOW() + '${index} milliseconds'::interval,
+      NOW() + '${index} milliseconds'::interval
     )`);
   });
 
@@ -283,12 +315,10 @@ export async function storeMessages(messages: InputMessage[]) {
     FROM conversations
     WHERE id = $1
   )
-  INSERT INTO messages (id, conversation_id, role, content, compressed_content, name, user_id, tenant_id, created_at, updated_at)
+  INSERT INTO messages (id, conversation_id, role, content, function_name, function_arguments, compressed_content, name, user_id, tenant_id, created_at, updated_at)
   VALUES ${chunks.join(',')}
   RETURNING *;
 `;
-
-  // console.log({ sql, params });
 
   const resp = await withDbClient(
     async (client) => await client.query(sql, params)

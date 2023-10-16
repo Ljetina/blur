@@ -12,9 +12,9 @@ export async function handleMessages(req: Request, res: Response) {
   const offset = (resolvedPage - 1) * resolvedLimit;
 
   const query = `
-    SELECT id, role, content, conversation_id, created_at, updated_at
+    SELECT id, role, content, conversation_id, created_at, updated_at, function_name, function_arguments
     FROM messages
-    WHERE user_id = $1 AND tenant_id = $2 AND conversation_id = $3 AND role != 'system'
+    WHERE user_id = $1 AND tenant_id = $2 AND conversation_id = $3 AND role != 'system' AND role != 'function'
     ORDER BY created_at DESC
     LIMIT $4 OFFSET $5;
 `;

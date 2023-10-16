@@ -3,10 +3,19 @@ import tiktoken from 'tiktoken-node';
 
 const encoding = tiktoken.getEncoding('cl100k_base');
 
-export function tokenLimitConversationHistory(messages: Message[], tokenBudget = 4000) {
-  const encodingLengths = messages.map(
-    (m) => encoding.encode(m.content).length
-  );
+export function tokenLimitConversationHistory(
+  messages: Message[],
+  tokenBudget = 4000
+) {
+  const encodingLengths = messages.map((m) => {
+    const contentToCount: string = m.function_call
+      ? (m.function_call.name + m.function_call.name)
+      : (m.content as string);
+      if (!contentToCount) {
+        return 0
+      }
+    return encoding.encode(contentToCount).length;
+  });
   let tokenBudgetRemaining = tokenBudget;
 
   const firstMessage = messages[0];
@@ -55,18 +64,18 @@ export function tokenLimitConversationHistory(messages: Message[], tokenBudget =
 //         WITH query_vector AS (
 //             SELECT $1::VECTOR AS vector
 //         )
-//         SELECT 
+//         SELECT
 //             snippets.id,
 //             snippets.document_id,
-//             snippets.start_index, 
+//             snippets.start_index,
 //             snippets.end_index,
 //             snippets.token_count,
-//             snippets.vector <-> (SELECT vector FROM query_vector) AS similarity 
-//         FROM 
+//             snippets.vector <-> (SELECT vector FROM query_vector) AS similarity
+//         FROM
 //             snippets
 //         WHERE
 //             snippets.tenant_id = $2
-//         ORDER BY 
+//         ORDER BY
 //             snippets.vector <-> (SELECT vector FROM query_vector)
 //         LIMIT 20;
 //     `;
@@ -93,8 +102,8 @@ export function tokenLimitConversationHistory(messages: Message[], tokenBudget =
 
 //         if (!documentContents[docId]) {
 //             const sql = `
-//                 SELECT content 
-//                 FROM documents 
+//                 SELECT content
+//                 FROM documents
 //                 WHERE id = $1;
 //             `;
 //             documentContents[docId] = await db.executeAndFetchOne(sql, [docId]);

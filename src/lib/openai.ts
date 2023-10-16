@@ -1,8 +1,11 @@
 import https from 'node:https';
-import { getFullConversation } from './db';
-import { Message } from '@App/types/model';
+import { InputMessage, getFullConversationAndNotebook } from './db';
+import { DbMessage, FullConversation, Message } from '@App/types/model';
 import { tokenLimitConversationHistory } from './token';
 import { SERVER_ACTION } from '@App/types/ws_actions';
+import { Function, getFunctions } from './functions';
+import { datasciencePrompt, defaultPrompt } from './prompts';
+import { logger } from './log';
 
 const options = {
   hostname: 'api.openai.com',
@@ -35,12 +38,6 @@ interface Chunk {
   choices?: Choice[];
 }
 
-interface Function {
-  name: string;
-  description?: string;
-  parameters: object;
-}
-
 export const makeChoiceHandler = (
   onEvent: (type: SERVER_ACTION, payload?: any) => void
 ) => {
@@ -51,25 +48,22 @@ export const makeChoiceHandler = (
   };
   return (c: Choice) => {
     if (c.delta && c.delta.function_call) {
-      // Function handling
-      if (c.finish_reason) {
-        const functionName = acc.name || c.delta.function_call.name;
-        const functionArguments =
-          acc.arguments + c.delta.function_call.arguments;
-        if (functionName && functionArguments) {
-          onEvent('start_function', { functionName, functionArguments });
-        }
-        acc.name = null;
-        acc.arguments = '';
-      } else {
-        const delta = c.delta;
-        if (delta.function_call && delta.function_call.name) {
-          acc.name = delta.function_call.name;
-        }
-        if (delta.function_call && delta.function_call.arguments) {
-          acc.arguments += delta.function_call.arguments;
-        }
+      const delta = c.delta;
+      if (delta.function_call && delta.function_call.name) {
+        acc.name = delta.function_call.name;
       }
+      if (delta.function_call && delta.function_call.arguments) {
+        acc.arguments += delta.function_call.arguments;
+      }
+    } else if (c.delta && c.finish_reason === 'function_call') {
+      if (acc.name && acc.arguments) {
+        onEvent('start_function', {
+          functionName: acc.name,
+          functionArguments: acc.arguments,
+        });
+      }
+      acc.name = null;
+      acc.arguments = '';
     } else if (c.delta && !c.delta?.function_call) {
       // Message delta handling
       if (c.finish_reason) {
@@ -83,25 +77,44 @@ export const makeChoiceHandler = (
   };
 };
 
-export async function streamCompletion(
-  conversationId: string,
-  query: string,
-  onEvent: (type: SERVER_ACTION, payload: any) => void
-) {
+export async function streamCompletion({
+  conversationId,
+  onEvent,
+  // query,
+  cache,
+}: {
+  conversationId: string;
+  onEvent: (type: SERVER_ACTION, payload: any) => void;
+  // query?: string;
+  cache?: any;
+}) {
+  console.log({ cache });
   const { messages, conversation } = await prepareMessages(
     conversationId,
-    query
+    // query,
+    cache['notebook']
   );
+
+  const functions = await getFunctions({ conversation });
+  // console.log('last message');
+  // console.log(messages[messages.length - 1]);
+  // console.log('last message');
+  // console.log(messages);
+
   const choiceHandler = makeChoiceHandler(onEvent);
   return new Promise((resolve, reject) => {
     startCompletion({
       model: conversation.model_id as 'gpt-4' | 'gpt-3.5-turbo',
       messages: messages,
+      functions: functions,
       onChunk: (c: Chunk) => {
         if (c.choices && c.choices.length > 0) {
           const choice = c.choices[0];
           choiceHandler(choice);
         }
+      },
+      onError: (e) => {
+        onEvent('response_error', { message: 'error handling request' });
       },
     })
       .then(resolve)
@@ -111,12 +124,14 @@ export async function streamCompletion(
 
 export async function prepareMessages(
   conversationId: string,
-  query: string
+  query?: string,
+  systemExtra?: string
 ): Promise<{
   messages: Message[];
-  conversation: { model_id: string; prompt: string; name?: string | undefined };
+  conversation: FullConversation;
 }> {
-  const conversation = await getFullConversation(conversationId);
+  const conversation = await getFullConversationAndNotebook(conversationId);
+
   let tokenConversationBudget: number;
   let tokenSimilarBudget: number;
 
@@ -131,27 +146,43 @@ export async function prepareMessages(
     tokenSimilarBudget = 500;
   }
 
-  let messages: Message[] = conversation.messages as Message[];
-
-  if (!messages.some((message) => message.role === 'system')) {
-    // If not, prepend the system message
-    messages = (
-      [{ role: 'system', content: conversation.prompt }] as Message[]
-    ).concat(messages);
-  }
-
-  messages = messages.map((m: Message): Message => {
-    const d: Message = {
-      role: m.role,
-      content: m.compressed_content || m.content,
+  let messages: Message[] = conversation.messages.map((i: DbMessage) => {
+    const message: Message = {
+      role: i.role,
+      content: null,
     };
-    if (m.role === 'function') {
-      d.name = m.name;
+    if (i.function_name) {
+      message.function_call = {
+        name: i.function_name as string,
+        arguments: i.function_arguments as string,
+      };
+      message.content = null;
+    } else {
+      message.content = i.content || i.compressed_content || '';
     }
-    return d;
+    if (i.name) {
+      message.name = i.name;
+    }
+    return message;
   });
-  messages.push({ role: 'user', content: query });
+  const prompt = conversation.notebook
+    ? datasciencePrompt + systemExtra
+    : defaultPrompt;
+  messages = ([{ role: 'system', content: prompt }] as Message[]).concat(
+    messages
+  );
+
+  if (query) {
+    messages.push({ role: 'user', content: query });
+  }
   messages = tokenLimitConversationHistory(messages, tokenConversationBudget);
+  console.log(messages[0])
+  console.log('!!!!')
+  console.log(
+    JSON.stringify(messages)
+    // JSON.stringify(messages.map((m) => `${m.role}: ${m.content?.substring(0, 100)}`))
+  );
+  // JSON.stringify(messages.map((m) => `${m.role}: ${m.content?.substring(0, 100)}`))
 
   return { messages, conversation };
 }
@@ -161,24 +192,29 @@ export async function startCompletion({
   messages,
   functions,
   onChunk,
+  onError,
 }: {
   model: 'gpt-3.5-turbo' | 'gpt-4';
   messages: Message[];
   functions?: Function[];
   onChunk: (chunk: Chunk) => void;
+  onError: (e: any) => void;
 }) {
+  console.log({ messages });
   return new Promise((resolve, reject) => {
     let hasAnnouncedEnd = false;
+    let nonDataChunks: string[] = [];
     const req = https.request(options, (res) => {
-      console.log('statusCode:', res.statusCode);
-      console.log('headers:', res.headers);
+      // console.log('statusCode:', res.statusCode);
       res.on('close', () => {
+        console.log('openai close');
         if (!hasAnnouncedEnd) {
           hasAnnouncedEnd = true;
           resolve(null);
         }
       });
       res.on('end', () => {
+        console.log('openai end');
         if (!hasAnnouncedEnd) {
           hasAnnouncedEnd = true;
           resolve(null);
@@ -186,13 +222,25 @@ export async function startCompletion({
       });
       res.on('data', (d) => {
         const rawChunk = d.toString('utf-8');
+        // JSON.parse(rawChunk)
+        // console.log('openai data', rawChunk);
         const lines = rawChunk.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const payload = line.slice(6, line.length);
+            // console.log({ payload });
             if (!payload.startsWith('[DONE]')) {
-              onChunk(JSON.parse(payload));
-              // console.log(JSON.parse(payload));
+              try {
+                const message = JSON.parse(payload);
+                if (message.error) {
+                  console.error(new Date(), 'openai error', message.error);
+                  onError(message.error);
+                } else {
+                  onChunk(message);
+                }
+              } catch (e) {
+                logger.error('error parsing data chunk as json', e);
+              }
             } else {
               if (!hasAnnouncedEnd) {
                 hasAnnouncedEnd = true;
@@ -201,8 +249,19 @@ export async function startCompletion({
             }
           } else if (line.length > 0) {
             console.log('non data chunk', line);
-          } else {
-            // skip
+            nonDataChunks.push(line);
+          } else if (nonDataChunks.length > 0) {
+            console.log('empty line');
+            const joinedChunks = nonDataChunks.join('\n');
+            try {
+              const parsedJSON = JSON.parse(joinedChunks);
+              if (parsedJSON.error) {
+                onError(parsedJSON.error);
+              }
+            } catch (e) {
+              logger.error('error parsing non-data chunk as json', e);
+            }
+            nonDataChunks = [];
           }
         }
       });
@@ -215,6 +274,7 @@ export async function startCompletion({
       JSON.stringify({
         model,
         messages,
+        functions,
         stream: true,
       })
     );

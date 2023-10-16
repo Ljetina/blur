@@ -1,9 +1,10 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import url from 'url';
 import { v4 as uuidv4 } from 'uuid';
-import { SERVER_ACTION, USER_ACTION } from '@App/types/ws_actions';
+import { SERVER_ACTION, USER_ACTION } from '../types/ws_actions';
 import { streamCompletion } from '../lib/openai';
-import { storeMessage, storeMessages } from '../lib/db';
+import { InputMessage, storeMessage, storeMessages } from '../lib/db';
+import { FRONTEND_FUNCTIONS } from '../lib/functions';
 
 export function startWsServer() {
   const wss = new WebSocketServer({
@@ -36,6 +37,7 @@ export function startWsServer() {
     // Parse the URL to get the conversation ID
     const pathName = url.parse(req.url).pathname;
     const conversationId = pathName?.split('/').pop() as string;
+    let cache: { notebook?: string } = {};
     // const conversationId: string = '488f3c07-1f94-4c48-b124-d0c57ea3cdc6';
 
     ws.on('close', (code, reason) => {
@@ -55,38 +57,52 @@ export function startWsServer() {
         const assistantUuid = uuidv4();
         ws.send(makeResponse('message_ack', { userUuid, assistantUuid }));
 
+        const userMessage = {
+          conversation_id: conversationId,
+          message_id: userUuid,
+          role: 'user',
+          message_content: text,
+        };
+        await storeMessages([userMessage]);
+
         try {
-          await streamCompletion(
+          await streamCompletion({
             conversationId,
-            text,
-            async (type, payload) => {
-              if (type == 'append_to_message') {
-                ws.send(makeResponse(type, payload));
-              } else if (type == 'response_done') {
-                // todo store message
-                ws.send(makeResponse(type));
-                console.log({ payload });
-                await storeMessages([
-                  {
-                    conversation_id: conversationId,
-                    message_id: userUuid,
-                    role: 'user',
-                    message_content: text,
-                  },
-                  {
-                    conversation_id: conversationId,
-                    message_id: assistantUuid,
-                    role: 'assistant',
-                    message_content: payload,
-                  },
-                ]);
-                // await Promise.all([]);
-              }
-            }
-          );
+            onEvent: makeCompletionHandler(ws, {
+              assistantUuid,
+              conversationId,
+              // userMessage,
+            }),
+            // query: text,
+            cache,
+          });
         } catch (e) {
           console.error(e);
         }
+      } else if (userAction === 'notebook_updated') {
+        cache['notebook'] = text;
+      } else if (userAction === 'frontend_function_result') {
+        const functionUuid = uuidv4();
+        const responseAssistantUuid = uuidv4();
+        const data = JSON.parse(text);
+        console.log(new Date(), 'storing function result', data);
+        await storeMessages([
+          {
+            conversation_id: conversationId,
+            message_id: functionUuid,
+            role: 'function',
+            message_content: data.content,
+            name: data.name,
+          },
+        ]);
+        await streamCompletion({
+          conversationId,
+          onEvent: makeCompletionHandler(ws, {
+            conversationId,
+            assistantUuid: responseAssistantUuid,
+          }),
+          cache,
+        });
       }
     });
   });
@@ -94,4 +110,56 @@ export function startWsServer() {
 
 function makeResponse(type: SERVER_ACTION, data?: any) {
   return JSON.stringify({ type, data });
+}
+
+function makeCompletionHandler(
+  ws: WebSocket,
+  {
+    conversationId,
+    // userMessage,
+    assistantUuid,
+  }: {
+    conversationId: string;
+    // userMessage?: InputMessage;
+    assistantUuid: string;
+  }
+): (type: SERVER_ACTION, payload: any) => void {
+  return async (type, payload) => {
+    if (type == 'append_to_message') {
+      ws.send(makeResponse(type, payload));
+    } else if (type == 'response_done') {
+      ws.send(makeResponse(type));
+      // console.log({ payload });
+      const assistantMessage = {
+        conversation_id: conversationId,
+        message_id: assistantUuid,
+        role: 'assistant',
+        message_content: payload,
+      };
+      await storeMessages([assistantMessage]);
+    } else if (type == 'start_function') {
+      if (FRONTEND_FUNCTIONS.includes(payload.functionName)) {
+        console.log(
+          new Date(),
+          'storing assistant message with function payload'
+        );
+        const assistantMessage: InputMessage = {
+          conversation_id: conversationId,
+          message_id: assistantUuid,
+          role: 'assistant',
+          function_name: payload.functionName,
+          function_arguments: payload.functionArguments,
+          name: payload.functionName,
+          message_content: 'Called function ' + payload.functionName,
+        };
+
+        await storeMessages([assistantMessage]);
+        ws.send(makeResponse('start_frontend_function', payload));
+      } else {
+        ws.send(makeResponse('start_function', payload));
+      }
+    } else if (type === 'response_error') {
+      ws.send(makeResponse('response_error', payload));
+    }
+  };
 }
