@@ -20,8 +20,8 @@ export function dollarsToCredits(dollars: number) {
 export function tokensToCredits(modelId: ModelId, usage: RequestUsage) {
   const [inputPrice, outputPrice] = modelToPrice[modelId];
   return (
-    dollarsToCredits(inputPrice * usage.promptTokens) +
-    dollarsToCredits(outputPrice * usage.completionTokens)
+    dollarsToCredits(inputPrice * usage.promptTokens / 1000) +
+    dollarsToCredits(outputPrice * usage.completionTokens / 1000)
   );
 }
 

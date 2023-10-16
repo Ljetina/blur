@@ -48,4 +48,7 @@ export interface Conversation {
   notebook_name: string;
   notebook_session_id: string;
   notebook_kernel_id: string;
+  user_id: string;
+  tenant_id: string;
+  tenant_credits: number;
 }

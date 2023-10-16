@@ -56,6 +56,7 @@ export async function initialServerData(userId: string, tenantId: string) {
       'ui_show_prompts', users.ui_show_prompts,
       'ui_show_conversations', users.ui_show_conversations,
       'selected_tenant_id', users.selected_tenant_id,
+      'tenant_credits', tenants.credits,
       'jupyter_settings', json_build_object(
         'host', coalesce(jupyter_settings.host, ''),
         'port', coalesce(jupyter_settings.port, ''),
@@ -96,6 +97,7 @@ export async function initialServerData(userId: string, tenantId: string) {
     )
     FROM users
     LEFT JOIN jupyter_settings ON users.id = jupyter_settings.user_id
+    JOIN tenants ON users.selected_tenant_id = tenants.id  -- joining 'users' and 'tenants'
     WHERE users.id = $1`,
         [userId, tenantId]
       )
@@ -191,9 +193,13 @@ export async function getConversation(
           conversation_notebook.notebook_path AS notebook_path, 
           conversation_notebook.notebook_name AS notebook_name, 
           conversation_notebook.session_id AS notebook_session_id, 
-          conversation_notebook.kernel_id AS notebook_kernel_id
+          conversation_notebook.kernel_id AS notebook_kernel_id,
+          conversations.tenant_id,
+          conversations.user_id,
+          tenants.credits AS tenant_credits
         FROM conversations
         LEFT JOIN conversation_notebook ON conversation_notebook.conversation_id = conversations.id
+        JOIN tenants ON tenants.id = conversations.tenant_id
         WHERE conversations.id = $1`,
         [conversationId]
       )
@@ -322,4 +328,64 @@ export async function storeMessages(messages: InputMessage[]) {
   );
 
   return resp.rows;
+}
+
+export async function storeApiUsage({
+  tenant_id,
+  user_id,
+  conversation_id,
+  prompt_tokens,
+  completion_tokens,
+  credits,
+  is_deducted = true,
+}: {
+  tenant_id: string;
+  user_id: string;
+  conversation_id: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  credits: number;
+  is_deducted?: boolean;
+}) {
+  const creditResp = await withDbClient(async (client) => {
+    // Begin transaction
+    await client.query('BEGIN');
+
+    // Insert into api_usage
+    await client.query(
+      `
+        INSERT INTO api_usage (id, tenant_id, user_id, conversation_id, 
+                              prompt_tokens, completion_tokens, is_deducted, credits, created_at)
+        VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, NOW())
+        RETURNING *;
+        `,
+      [
+        tenant_id,
+        user_id,
+        conversation_id,
+        prompt_tokens,
+        completion_tokens,
+        is_deducted,
+        credits,
+      ]
+    );
+
+    // Deduct credits from tenants
+    const creditResp = await client.query(
+      `
+      UPDATE tenants
+      SET credits = credits - $1
+      WHERE id = $2 
+      RETURNING credits;
+      `,
+      [credits, tenant_id]
+    );
+
+    // Commit transaction
+    await client.query('COMMIT');
+
+    return creditResp.rows[0];
+  });
+
+  return creditResp;
 }

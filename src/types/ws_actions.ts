@@ -15,4 +15,6 @@ export type SERVER_ACTION =
   | 'start_function'
   | 'start_frontend_function'
   | 'function_result'
-  | 'response_error';
+  | 'response_error'
+  | 'out_of_credits'
+  | 'remaining_credits';

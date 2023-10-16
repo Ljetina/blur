@@ -3,11 +3,17 @@ import url from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { SERVER_ACTION, USER_ACTION } from '../types/ws_actions';
 import { streamCompletion } from '../lib/openai';
-import { InputMessage, getConversation, storeMessages } from '../lib/db';
+import {
+  InputMessage,
+  getConversation,
+  storeApiUsage,
+  storeMessages,
+} from '../lib/db';
 import { FRONTEND_FUNCTIONS } from '../lib/functions';
-import { tokensToCredits } from '../lib/pricing';
+import { RequestUsage, tokensToCredits } from '../lib/pricing';
 import { Server } from 'http';
 import { verifyClient } from '../lib/auth';
+import { Conversation } from '@App/types/model';
 
 export function startWsServer(server: Server) {
   const wss = new WebSocketServer({
@@ -43,6 +49,7 @@ export function startWsServer(server: Server) {
     const pathName = url.parse(req.url).pathname;
     const conversationId = pathName?.split('/').pop() as string;
     const conversation = await getConversation(conversationId);
+    // ws.send(makeResponse('start_frontend_function', payload));
 
     let cache: { notebook?: string } = {};
     // const conversationId: string = '488f3c07-1f94-4c48-b124-d0c57ea3cdc6';
@@ -58,7 +65,15 @@ export function startWsServer(server: Server) {
       console.log('on message', stringMessage);
       const { action, text } = JSON.parse(stringMessage);
       const userAction = action as USER_ACTION;
+
       if (userAction === 'create_message') {
+        console.log(conversation.tenant_id);
+        console.log(conversation.tenant_credits);
+        if (conversation.tenant_credits < 100) {
+          console.log('sending out of credits');
+          ws.send(makeResponse('out_of_credits', null));
+          return;
+        }
         // Send a response back to the client
         const userUuid = uuidv4();
         const assistantUuid = uuidv4();
@@ -81,7 +96,7 @@ export function startWsServer(server: Server) {
             }),
             cache,
           });
-          const credits = tokensToCredits(conversation.model_id, usage);
+          conversation.tenant_credits = await handleUsage(conversation, usage, ws);
         } catch (e) {
           console.error('error in streaming primary request', e);
         }
@@ -110,13 +125,35 @@ export function startWsServer(server: Server) {
             }),
             cache,
           });
-          const credits = tokensToCredits(conversation.model_id, usage);
+          conversation.tenant_credits = await handleUsage(conversation, usage, ws);
         } catch (e) {
           console.error('error in streaming follow up assistant request', e);
         }
       }
     });
   });
+}
+
+async function handleUsage(
+  conversation: Conversation,
+  usage: RequestUsage,
+  ws: WebSocket
+) {
+  const credits = tokensToCredits(conversation.model_id, usage);
+  const remaining = await storeApiUsage({
+    tenant_id: conversation.tenant_id,
+    conversation_id: conversation.id,
+    user_id: conversation.user_id,
+    completion_tokens: usage.completionTokens,
+    prompt_tokens: usage.promptTokens,
+    credits: credits,
+  });
+  console.log({ remaining });
+
+  ws.send(
+    makeResponse('remaining_credits', { remainingCredits: remaining.credits })
+  );
+  return remaining;
 }
 
 function makeResponse(type: SERVER_ACTION, data?: any) {
@@ -127,11 +164,9 @@ function makeCompletionHandler(
   ws: WebSocket,
   {
     conversationId,
-    // userMessage,
     assistantUuid,
   }: {
     conversationId: string;
-    // userMessage?: InputMessage;
     assistantUuid: string;
   }
 ): (type: SERVER_ACTION, payload: any) => void {
