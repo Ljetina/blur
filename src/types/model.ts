@@ -1,5 +1,7 @@
 import { InputMessage } from '@App/lib/db';
 
+export type ModelId = 'gpt-3.5-turbo' | 'gpt-4';
+
 /**
  * Message as passed to OpenAI API https://platform.openai.com/docs/api-reference/chat/create
  */
@@ -35,4 +37,15 @@ export interface FullConversation {
     session_id: string;
     kernel_id: string;
   };
+}
+
+export interface Conversation {
+  id: string;
+  name: string;
+  prompt: string;
+  model_id: ModelId;
+  notebook_path: string;
+  notebook_name: string;
+  notebook_session_id: string;
+  notebook_kernel_id: string;
 }

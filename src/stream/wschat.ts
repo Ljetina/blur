@@ -3,12 +3,17 @@ import url from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { SERVER_ACTION, USER_ACTION } from '../types/ws_actions';
 import { streamCompletion } from '../lib/openai';
-import { InputMessage, storeMessage, storeMessages } from '../lib/db';
+import { InputMessage, getConversation, storeMessages } from '../lib/db';
 import { FRONTEND_FUNCTIONS } from '../lib/functions';
+import { tokensToCredits } from '../lib/pricing';
+import { Server } from 'http';
+import { verifyClient } from '../lib/auth';
 
-export function startWsServer() {
+export function startWsServer(server: Server) {
   const wss = new WebSocketServer({
-    port: 8080,
+    // port: 8080,
+    server,
+    verifyClient,
     perMessageDeflate: {
       zlibDeflateOptions: {
         // See zlib defaults.
@@ -32,11 +37,13 @@ export function startWsServer() {
 
   const connections: Record<string, WebSocket> = {};
 
-  wss.on('connection', (ws, req: Request) => {
+  wss.on('connection', async (ws, req: Request) => {
     console.log('ws connection opened');
     // Parse the URL to get the conversation ID
     const pathName = url.parse(req.url).pathname;
     const conversationId = pathName?.split('/').pop() as string;
+    const conversation = await getConversation(conversationId);
+
     let cache: { notebook?: string } = {};
     // const conversationId: string = '488f3c07-1f94-4c48-b124-d0c57ea3cdc6';
 
@@ -66,18 +73,17 @@ export function startWsServer() {
         await storeMessages([userMessage]);
 
         try {
-          await streamCompletion({
-            conversationId,
+          const usage = await streamCompletion({
+            conversation,
             onEvent: makeCompletionHandler(ws, {
               assistantUuid,
               conversationId,
-              // userMessage,
             }),
-            // query: text,
             cache,
           });
+          const credits = tokensToCredits(conversation.model_id, usage);
         } catch (e) {
-          console.error(e);
+          console.error('error in streaming primary request', e);
         }
       } else if (userAction === 'notebook_updated') {
         cache['notebook'] = text;
@@ -95,14 +101,19 @@ export function startWsServer() {
             name: data.name,
           },
         ]);
-        await streamCompletion({
-          conversationId,
-          onEvent: makeCompletionHandler(ws, {
-            conversationId,
-            assistantUuid: responseAssistantUuid,
-          }),
-          cache,
-        });
+        try {
+          const usage = await streamCompletion({
+            conversation,
+            onEvent: makeCompletionHandler(ws, {
+              conversationId,
+              assistantUuid: responseAssistantUuid,
+            }),
+            cache,
+          });
+          const credits = tokensToCredits(conversation.model_id, usage);
+        } catch (e) {
+          console.error('error in streaming follow up assistant request', e);
+        }
       }
     });
   });

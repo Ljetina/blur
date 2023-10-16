@@ -1,8 +1,6 @@
 import 'dotenv/config';
-import { prepareApp, startListening } from './app';
-import { startWsServer } from './stream/wschat';
+import { startListening } from './app';
 
-startListening(prepareApp());
-startWsServer();
+startListening();
 
 export {};

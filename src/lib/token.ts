@@ -1,5 +1,6 @@
 import { Message } from '@App/types/model';
 import tiktoken from 'tiktoken-node';
+import { Function } from './functions';
 
 const encoding = tiktoken.getEncoding('cl100k_base');
 
@@ -9,11 +10,11 @@ export function tokenLimitConversationHistory(
 ) {
   const encodingLengths = messages.map((m) => {
     const contentToCount: string = m.function_call
-      ? (m.function_call.name + m.function_call.name)
+      ? m.function_call.name + m.function_call.name
       : (m.content as string);
-      if (!contentToCount) {
-        return 0
-      }
+    if (!contentToCount) {
+      return 0;
+    }
     return encoding.encode(contentToCount).length;
   });
   let tokenBudgetRemaining = tokenBudget;
@@ -42,8 +43,27 @@ export function tokenLimitConversationHistory(
   const filteredMessages = [firstMessage, secondMessage].concat(
     messageAcc.reverse()
   );
+  console.log('id', filteredMessages.map(m => m.content?.substring(0, 20)))
 
   return filteredMessages;
+}
+
+export function countInputTokens(messages: Message[], functions?: Function[]) {
+  let inputTokenCount = 0;
+  for (const message of messages) {
+    inputTokenCount +=
+      encoding.encode(message.role + ' ' + message?.content).length + 4;
+  }
+  inputTokenCount -= messages.length;
+  inputTokenCount += 3;
+  if (functions) {
+    const functionTokenCount = encoding.encode(
+      JSON.stringify(functions || '')
+    ).length;
+    inputTokenCount += functionTokenCount;
+    inputTokenCount -= 4;
+  }
+  return inputTokenCount;
 }
 
 // function queryVectorDb(messages, tokenBudget = 1000) {

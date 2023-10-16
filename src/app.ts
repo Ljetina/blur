@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import express, { Express } from 'express';
+import http from 'http';
 
-import { addAuthRoutes, authenticate } from './lib/auth';
+import { addAuthRoutes, authenticate, getSessionMiddleWare } from './lib/auth';
 import { initialDataHandler } from './routes/initial/initial';
 import {
   handleCreateConversation,
@@ -18,13 +19,14 @@ import {
   handleUpsertConversationNotebook,
 } from './routes/conversation/notebook/notebook';
 import { handleCreateUserNotebook } from './routes/user/notebook/notebook';
+import { startWsServer } from './stream/wschat';
 
-export function prepareApp() {
+export function prepareApp(sessionMiddleware: any) {
   const app = express();
 
   app.use(express.json());
   app.use(morganMiddleware);
-  addAuthRoutes(app);
+  addAuthRoutes(app, sessionMiddleware);
   app.get('/initial', authenticate, initialDataHandler);
   app.post('/conversation', authenticate, handleCreateConversation);
   app.delete('/conversation/:id', authenticate, handleDeleteConversation);
@@ -50,8 +52,11 @@ export function prepareApp() {
   return app;
 }
 
-export function startListening(app: Express) {
-  app.listen(
+export function startListening() {
+  const app = prepareApp(getSessionMiddleWare());
+  const server = http.createServer(app);
+  startWsServer(server);
+  server.listen(
     process.env.NODE_ENV == 'test'
       ? 9999
       : process.env.PORT

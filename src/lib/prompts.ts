@@ -1,7 +1,6 @@
 export const defaultPrompt = `
 You are IslandFox.ai. A general purpose chat assistant. Please only use the functions provided to you. Respond in markdown when relevant.
-When you have jupyter notebook functions and the users requests to 'execute' or 'run' some code, use those functions for this purpose.
-Think step by step
+Think step by step.
 `;
 
 export const datasciencePrompt = `
@@ -26,4 +25,18 @@ Some best practices for python code:
 
 Some guidance on interacting with the user;
 - The user can see this notebook and the resulting execution, so you only have to discuss details about the code, instead of repeating the code in your answers.
+
 `;
+
+export const addNotebook = (n: string | undefined) =>
+  n
+    ? `
+
+## Data
+
+${n}
+
+END Data
+
+`
+    : '';

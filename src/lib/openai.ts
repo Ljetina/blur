@@ -1,11 +1,18 @@
 import https from 'node:https';
-import { InputMessage, getFullConversationAndNotebook } from './db';
-import { DbMessage, FullConversation, Message } from '@App/types/model';
-import { tokenLimitConversationHistory } from './token';
+import {
+  getMessagesForPrompt,
+} from './db';
+import {
+  Conversation,
+  DbMessage,
+  Message,
+} from '@App/types/model';
+import { countInputTokens, tokenLimitConversationHistory } from './token';
 import { SERVER_ACTION } from '@App/types/ws_actions';
 import { Function, getFunctions } from './functions';
 import { datasciencePrompt, defaultPrompt } from './prompts';
 import { logger } from './log';
+import { RequestUsage } from './pricing';
 
 const options = {
   hostname: 'api.openai.com',
@@ -78,22 +85,16 @@ export const makeChoiceHandler = (
 };
 
 export async function streamCompletion({
-  conversationId,
+  conversation,
   onEvent,
-  // query,
   cache,
 }: {
-  conversationId: string;
+  conversation: Conversation;
   onEvent: (type: SERVER_ACTION, payload: any) => void;
-  // query?: string;
   cache?: any;
-}) {
+}): Promise<{ promptTokens: number; completionTokens: number }> {
   console.log({ cache });
-  const { messages, conversation } = await prepareMessages(
-    conversationId,
-    // query,
-    cache['notebook']
-  );
+  const { messages } = await prepareMessages(conversation, cache['notebook']);
 
   const functions = await getFunctions({ conversation });
   // console.log('last message');
@@ -123,15 +124,13 @@ export async function streamCompletion({
 }
 
 export async function prepareMessages(
-  conversationId: string,
+  conversation: Conversation,
   query?: string,
   systemExtra?: string
 ): Promise<{
   messages: Message[];
-  conversation: FullConversation;
 }> {
-  const conversation = await getFullConversationAndNotebook(conversationId);
-
+  const messages = await getMessagesForPrompt(conversation.id);
   let tokenConversationBudget: number;
   let tokenSimilarBudget: number;
 
@@ -146,7 +145,7 @@ export async function prepareMessages(
     tokenSimilarBudget = 500;
   }
 
-  let messages: Message[] = conversation.messages.map((i: DbMessage) => {
+  let promptMessages: Message[] = messages.map((i: DbMessage) => {
     const message: Message = {
       role: i.role,
       content: null,
@@ -165,26 +164,29 @@ export async function prepareMessages(
     }
     return message;
   });
-  const prompt = conversation.notebook
+  const prompt = conversation.notebook_name
     ? datasciencePrompt + systemExtra
     : defaultPrompt;
-  messages = ([{ role: 'system', content: prompt }] as Message[]).concat(
-    messages
+  promptMessages = ([{ role: 'system', content: prompt }] as Message[]).concat(
+    promptMessages
   );
 
   if (query) {
-    messages.push({ role: 'user', content: query });
+    promptMessages.push({ role: 'user', content: query });
   }
-  messages = tokenLimitConversationHistory(messages, tokenConversationBudget);
-  console.log(messages[0])
-  console.log('!!!!')
-  console.log(
-    JSON.stringify(messages)
-    // JSON.stringify(messages.map((m) => `${m.role}: ${m.content?.substring(0, 100)}`))
+  promptMessages = tokenLimitConversationHistory(
+    promptMessages,
+    tokenConversationBudget
   );
+  // console.log(messages[0]);
+  // console.log('!!!!');
+  // console.log(
+  // JSON.stringify(messages)
+  // JSON.stringify(messages.map((m) => `${m.role}: ${m.content?.substring(0, 100)}`))
+  // );
   // JSON.stringify(messages.map((m) => `${m.role}: ${m.content?.substring(0, 100)}`))
 
-  return { messages, conversation };
+  return { messages: promptMessages };
 }
 
 export async function startCompletion({
@@ -199,26 +201,31 @@ export async function startCompletion({
   functions?: Function[];
   onChunk: (chunk: Chunk) => void;
   onError: (e: any) => void;
-}) {
-  console.log({ messages });
+}): Promise<{ promptTokens: number; completionTokens: number }> {
+  // console.log({ messages });
+  const requestUsage: RequestUsage = {
+    promptTokens: countInputTokens(messages, functions),
+    completionTokens: 0,
+  };
   return new Promise((resolve, reject) => {
     let hasAnnouncedEnd = false;
     let nonDataChunks: string[] = [];
+
+    function announceEnd() {
+      if (!hasAnnouncedEnd) {
+        hasAnnouncedEnd = true;
+        resolve(requestUsage);
+      }
+    }
     const req = https.request(options, (res) => {
       // console.log('statusCode:', res.statusCode);
       res.on('close', () => {
         console.log('openai close');
-        if (!hasAnnouncedEnd) {
-          hasAnnouncedEnd = true;
-          resolve(null);
-        }
+        announceEnd();
       });
       res.on('end', () => {
         console.log('openai end');
-        if (!hasAnnouncedEnd) {
-          hasAnnouncedEnd = true;
-          resolve(null);
-        }
+        announceEnd();
       });
       res.on('data', (d) => {
         const rawChunk = d.toString('utf-8');
@@ -230,6 +237,7 @@ export async function startCompletion({
             const payload = line.slice(6, line.length);
             // console.log({ payload });
             if (!payload.startsWith('[DONE]')) {
+              requestUsage.completionTokens += 1;
               try {
                 const message = JSON.parse(payload);
                 if (message.error) {
@@ -242,10 +250,7 @@ export async function startCompletion({
                 logger.error('error parsing data chunk as json', e);
               }
             } else {
-              if (!hasAnnouncedEnd) {
-                hasAnnouncedEnd = true;
-                resolve(null);
-              }
+              announceEnd();
             }
           } else if (line.length > 0) {
             console.log('non data chunk', line);

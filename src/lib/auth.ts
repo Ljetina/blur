@@ -8,21 +8,70 @@ const PGStore = connectPgSimple(session);
 
 import { withDbClient, getPool, getUserByEmail, getDbClient } from './db';
 import { SessionUser } from '../express-session.extensions';
+import { parse } from 'cookie';
 
-export function addAuthRoutes(app: Express) {
-  app.use(
-    session({
-      store: new PGStore({
-        pool: getPool(),
-        tableName: 'session',
-      }),
-      secret: process.env.SESSION_SECRET as string,
-      resave: false,
-      saveUninitialized: true,
-      cookie: { secure: false }, // use 'secure: true' for production to ensure the cookie is sent over HTTPS
-    })
-  );
+export const verifyClient =
+  (sessionMiddleware: any) => async (info: any, done: any) => {
+    const req = info.req;
+    const cookies = parse(req.headers.cookie || '');
+    const sid = cookies['connect.sid'];
 
+    if (!sid) {
+      done(false, 401, 'Unauthorized');
+      return;
+    }
+    sessionMiddleware(req, {} as any, async () => {
+      if (!req.session || !req.session.user) {
+        done(false, 401, 'Unauthorized');
+        return;
+      }
+      const user = req.session.user as SessionUser;
+
+      const oauthTokenQuery = 'SELECT user_id FROM oauth_tokens WHERE id = $1';
+      const oauthTokenValues = [user.id];
+      const oauthResult = await withDbClient(
+        async (c) => await c.query(oauthTokenQuery, oauthTokenValues)
+      );
+
+      if (oauthResult.rows.length === 0) {
+        done(false, 401, 'Unauthorized');
+        return;
+      }
+
+      const userId = oauthResult.rows[0].user_id;
+      req.user_id = userId;
+
+      const userQuery = 'SELECT selected_tenant_id FROM users WHERE id = $1';
+      const userValues = [userId];
+      const userResult = await withDbClient(
+        async (c) => await c.query(userQuery, userValues)
+      );
+
+      if (userResult.rows.length === 0) {
+        done(false, 401, 'Unauthorized');
+        return;
+      }
+
+      req.tenant_id = userResult.rows[0].selected_tenant_id;
+      done(true);
+    });
+  };
+
+export function getSessionMiddleWare() {
+  return session({
+    store: new PGStore({
+      pool: getPool(),
+      tableName: 'session',
+    }),
+    secret: process.env.SESSION_SECRET as string,
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }, // use 'secure: true' for production to ensure the cookie is sent over HTTPS
+  });
+}
+
+export function addAuthRoutes(app: Express, sessionMiddleware: any) {
+  app.use(sessionMiddleware);
   app.use(
     cors({
       origin: 'http://localhost:3000',

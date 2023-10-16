@@ -1,4 +1,4 @@
-import { FullConversation } from '@App/types/model';
+import { Conversation, FullConversation } from '@App/types/model';
 
 type FunctionName = 'add_cell' | 'update_cell' | 'delete_cell' | 'read_cells';
 
@@ -25,10 +25,26 @@ export interface Function {
 export async function getFunctions({
   conversation,
 }: {
-  conversation: FullConversation;
+  conversation: Conversation;
 }) {
-  let functions: Function[] = [];
-  if (conversation.notebook.path) {
+  let functions: Function[] = [
+    // {
+    //   name: 'dummy',
+    //   description:
+    //     "This function does nothing, nothing I say. I'm just using it to see what kind of api usage these descriptions lead to.",
+    //   parameters: {
+    //     type: 'object',
+    //     properties: {
+    //       argumentative: {
+    //         type: 'boolean',
+    //         description: 'Whether the user is argumentative',
+    //       },
+    //     },
+    //     required: ['argumentative'],
+    //   },
+    // },
+  ];
+  if (conversation.notebook_path) {
     functions = functions.concat(notebookFunctions);
   }
   if (functions.length == 0) {
