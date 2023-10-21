@@ -81,7 +81,7 @@ export function addAuthRoutes(app: Express, sessionMiddleware: any) {
   app.use(sessionMiddleware);
   app.use(
     cors({
-      origin: 'http://localhost:3000',
+      origin: process.env.ORIGIN_URI,
       credentials: true, // to support cookies from the client
     })
   );
@@ -112,7 +112,7 @@ export function addAuthRoutes(app: Express, sessionMiddleware: any) {
     function (req, res) {
       req.session.user = req.user as SessionUser;
       const redirectUrl =
-        `http://localhost:3000/redirect?name=${encodeURIComponent(
+        `${process.env.ORIGIN_URI}/redirect?name=${encodeURIComponent(
           req.session.user.name
         )}` +
         (req.session.user.profilePic
@@ -153,7 +153,7 @@ export function makeGoogleStrategy() {
     {
       clientID: process.env.GOOGLE_ID as string,
       clientSecret: process.env.GOOGLE_SECRET as string,
-      callbackURL: 'http://localhost:3001/auth/google/callback',
+      callbackURL: process.env.AUTH_CALLBACK,
     },
     async function (accessToken, refreshToken, profile, done) {
       if (!profile.emails) {
