@@ -5,7 +5,7 @@ services:
     image: ghcr.io/ljetina/blur:latest
     restart: unless-stopped
     env_file:
-      - .env  # loading environment variables from the .env file for 'blur' service
+      - ../.env  # loading environment variables from the .env file for 'blur' service
     networks:
       - app-network
 
@@ -24,7 +24,7 @@ services:
     image: postgres   
     restart: always
     env_file:
-      - .env.db  # loading POSTGRES_USER and POSTGRES_PASSWORD from .env.db
+      - ../.env.db  # loading POSTGRES_USER and POSTGRES_PASSWORD from .env.db
     volumes:
       - /mnt/db:/var/lib/postgresql/data
     networks:
