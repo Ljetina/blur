@@ -26,7 +26,7 @@ services:
     env_file:
       - ../.env.db  # loading POSTGRES_USER and POSTGRES_PASSWORD from .env.db
     volumes:
-      - /mnt/db:/var/lib/postgresql/data
+      - /mnt/db/data:/var/lib/postgresql/data
     networks:
       - app-network
     ports:
