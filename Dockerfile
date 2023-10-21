@@ -1,6 +1,8 @@
 # ---- Build Stage ----
 FROM node:18.18.2-alpine as build
 
+RUN apk add --no-cache libc6-compat
+
 # Set working directory
 WORKDIR /usr/src/app
 
