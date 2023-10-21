@@ -1,7 +1,5 @@
 # ---- Build Stage ----
-FROM node:18.18.2-alpine as build
-
-RUN apk add --no-cache libc6-compat
+FROM node:18.18.2 as build
 
 # Set working directory
 WORKDIR /usr/src/app
@@ -22,6 +20,8 @@ RUN npm run build
 
 # ---- Run Stage ----
 FROM node:18.18.2-alpine as runner
+
+RUN apk add --no-cache libc6-compat
 
 WORKDIR /usr/src/app
 
