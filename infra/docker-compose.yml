@@ -1,10 +1,11 @@
-version: '3'
+version: '3.1'
+
 services:
-  app:
-    image: ghcr.io/bartolkaruza/node-app:latest
+  blur: 
+    image: ghcr.io/ljetina/blur:latest
     restart: unless-stopped
-    environment:
-      NODE_ENV: production
+    env_file:
+      - .env  # loading environment variables from the .env file for 'blur' service
     networks:
       - app-network
 
@@ -15,19 +16,25 @@ services:
     ports:
       - '80:80'
     depends_on:
-      - app
+      - blur
     networks:
       - app-network
 
   db:
-    image: ankane/pgvector:v0.5.1
+    image: postgres   
+    restart: always
     env_file:
-      - db_password.txt
+      - .env.db  # loading POSTGRES_USER and POSTGRES_PASSWORD from .env.db
     volumes:
       - /mnt/db:/var/lib/postgresql/data
     networks:
       - app-network
-    restart: unless-stopped
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
 
 networks:
   app-network:
