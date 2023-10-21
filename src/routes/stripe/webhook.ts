@@ -16,6 +16,7 @@ export function stripeCallbackHandler(request: Request, response: Response) {
 
   try {
     event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
+    console.log(new Date(), event.type);
     if (event.type === 'checkout.session.completed') {
       if (event.data.object.invoice) {
         cache[event.data.object.invoice] = {
