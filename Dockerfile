@@ -19,9 +19,9 @@ COPY types.d.ts types.d.ts
 RUN npm run build
 
 # ---- Run Stage ----
-FROM node:18.18.2-alpine as runner
+FROM node:18.18.2-slim as runner
 
-RUN apk add --no-cache libc6-compat
+# RUN apk add --no-cache libc6-compat
 
 WORKDIR /usr/src/app
 
