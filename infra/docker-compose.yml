@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     env_file:
       - ../.env  # loading environment variables from the .env file for 'blur' service
+    logging:
+      driver: journald
     networks:
       - app-network
 
@@ -17,6 +19,8 @@ services:
       - '80:80'
     depends_on:
       - blur
+    logging:
+      driver: journald
     networks:
       - app-network
 
@@ -27,6 +31,8 @@ services:
       - ../.env.db  # loading POSTGRES_USER and POSTGRES_PASSWORD from .env.db
     volumes:
       - /mnt/db/data:/var/lib/postgresql/data
+    logging:
+      driver: journald
     networks:
       - app-network
     ports:

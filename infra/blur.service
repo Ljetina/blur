@@ -5,19 +5,11 @@ After=docker.service
 
 [Service]
 WorkingDirectory=/home/ec2-user/blur
-
-# Restart on crash
 Restart=always
-
-# Remove old containers before starting
 ExecStartPre=/usr/local/bin/docker-compose -f infra/docker-compose.yml down -v
 ExecStartPre=/usr/local/bin/docker-compose -f infra/docker-compose.yml rm -fsv
 ExecStartPre=-/usr/local/bin/docker-compose -f infra/docker-compose.yml pull
-
-# Compose up
 ExecStart=/usr/local/bin/docker-compose -f infra/docker-compose.yml up
-
-# Compose down, remove containers and volumes
 ExecStop=/usr/local/bin/docker-compose -f infra/docker-compose.yml down -v
 
 [Install]
