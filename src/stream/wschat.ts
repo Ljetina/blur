@@ -64,6 +64,10 @@ export function startWsServer(server: Server) {
     const tenantId = req.tenant_id;
     tenantConnections[tenantId] = ws;
 
+    ws.on('ping', () => {
+      console.log('Received ping from client');
+    });
+
     let cache: { notebook?: string } = {};
 
     ws.on('close', (code, reason) => {
@@ -78,6 +82,10 @@ export function startWsServer(server: Server) {
 
     ws.on('message', async (message: Buffer) => {
       const stringMessage = message.toString('utf-8');
+      if (stringMessage === 'ping') {
+        ws.send('pong');
+        return;
+      }
       console.log('on message', stringMessage);
       const { action, text } = JSON.parse(stringMessage);
       const userAction = action as USER_ACTION;
