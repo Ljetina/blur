@@ -78,6 +78,7 @@ export function getSessionMiddleWare() {
 }
 
 export function addAuthRoutes(app: Express, sessionMiddleware: any) {
+  console.log('ORIGIN URI', process.env.ORIGIN_URI);
   app.use(sessionMiddleware);
   app.use(
     cors({
