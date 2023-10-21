@@ -1,30 +1,22 @@
 import { Request, Response } from 'express';
-import { getDbClient, withDbClient } from '../../lib/db';
+import { createConversation, getDbClient, withDbClient } from '../../lib/db';
 
 const handleCreateConversation = async (req: Request, res: Response) => {
   try {
     const { folder_id, name, prompt, temperature, model_id } = req.body;
     const { user_id, tenant_id } = req;
-    console.log({ b: req.body, user_id, tenant_id });
-
-    const insertQuery = `
-      INSERT INTO conversations (id, folder_id, name, prompt, temperature, model_id, user_id, tenant_id)
-      VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7)
-      RETURNING id, name, prompt, temperature, model_id
-    `;
-    const insertValues = [
-      folder_id,
-      name,
-      prompt,
-      temperature,
-      model_id,
-      user_id,
-      tenant_id,
-    ];
-    const insertResult = await withDbClient(
-      async (client) => await client.query(insertQuery, insertValues)
+    const insertResult = await withDbClient((client) =>
+      createConversation(
+        {
+          name,
+          temperature,
+          model_id,
+          user_id: user_id as string,
+          tenant_id: tenant_id as string,
+        },
+        client
+      )
     );
-
     res.status(201).json({ ...insertResult.rows[0], message_count: 0 });
   } catch (err) {
     console.error(err);

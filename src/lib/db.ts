@@ -57,6 +57,7 @@ export async function initialServerData(userId: string, tenantId: string) {
       'ui_show_conversations', users.ui_show_conversations,
       'selected_tenant_id', users.selected_tenant_id,
       'tenant_credits', tenants.credits,
+      'tenant_id', tenants.id,
       'jupyter_settings', json_build_object(
         'host', coalesce(jupyter_settings.host, ''),
         'port', coalesce(jupyter_settings.port, ''),
@@ -97,12 +98,48 @@ export async function initialServerData(userId: string, tenantId: string) {
     )
     FROM users
     LEFT JOIN jupyter_settings ON users.id = jupyter_settings.user_id
-    JOIN tenants ON users.selected_tenant_id = tenants.id  -- joining 'users' and 'tenants'
+    JOIN tenants ON users.selected_tenant_id = tenants.id
     WHERE users.id = $1`,
         [userId, tenantId]
       )
   );
+  console.log(resp.rows);
   return resp.rows[0]['json_build_object'];
+}
+
+export async function createConversation(
+  {
+    name,
+    temperature,
+    model_id,
+    user_id,
+    tenant_id,
+  }: {
+    name: string;
+    temperature: number;
+    model_id: string;
+    user_id: string;
+    tenant_id: string;
+  },
+  client: PoolClient
+) {
+  const folder_id = undefined;
+  const prompt = undefined;
+  const insertQuery = `
+  INSERT INTO conversations (id, folder_id, name, prompt, temperature, model_id, user_id, tenant_id)
+  VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7)
+  RETURNING id, name, prompt, temperature, model_id
+`;
+  const insertValues = [
+    folder_id,
+    name,
+    prompt,
+    temperature,
+    model_id,
+    user_id,
+    tenant_id,
+  ];
+  return await client.query(insertQuery, insertValues);
 }
 
 export async function getMessages({
@@ -375,6 +412,49 @@ export async function storeApiUsage({
       `
       UPDATE tenants
       SET credits = credits - $1
+      WHERE id = $2 
+      RETURNING credits;
+      `,
+      [credits, tenant_id]
+    );
+
+    // Commit transaction
+    await client.query('COMMIT');
+
+    return creditResp.rows[0];
+  });
+
+  return creditResp;
+}
+
+export async function storeInvoiceIncreaseCredits({
+  tenant_id,
+  invoice_id,
+  credits,
+}: {
+  tenant_id: string;
+  invoice_id: string;
+  credits: number;
+}) {
+  const creditResp = await withDbClient(async (client) => {
+    // Begin transaction
+    await client.query('BEGIN');
+
+    // Insert into invoices
+    await client.query(
+      `
+        INSERT INTO invoices (invoice_id, tenant_id)
+        VALUES ($1, $2)
+        RETURNING *;
+        `,
+      [invoice_id, tenant_id]
+    );
+
+    // Add credits to tenants
+    const creditResp = await client.query(
+      `
+      UPDATE tenants
+      SET credits = credits + $1
       WHERE id = $2 
       RETURNING credits;
       `,

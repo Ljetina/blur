@@ -6,9 +6,16 @@ import cors from 'cors';
 import { default as connectPgSimple } from 'connect-pg-simple';
 const PGStore = connectPgSimple(session);
 
-import { withDbClient, getPool, getUserByEmail, getDbClient } from './db';
+import {
+  withDbClient,
+  getPool,
+  getUserByEmail,
+  getDbClient,
+  createConversation,
+} from './db';
 import { SessionUser } from '../express-session.extensions';
 import { parse } from 'cookie';
+import { logger } from './log';
 
 export const verifyClient =
   (sessionMiddleware: any) => async (info: any, done: any) => {
@@ -115,7 +122,11 @@ export function addAuthRoutes(app: Express, sessionMiddleware: any) {
     }
   );
 
-  app.post('/logout', (req, res) => {
+  app.get('/auth/check', authenticate, (req, res) => {
+    res.status(200).json({ status: 'ok' });
+  });
+
+  app.post('/auth/logout', (req, res) => {
     if (req.session.user) {
       const tokenId = (req.session.user as SessionUser).id;
 
@@ -179,13 +190,17 @@ export function makeGoogleStrategy() {
           tokenId = await createTokenRecord(userId);
         } else {
           const tenantRes = await client.query(
-            `INSERT INTO tenants (name) VALUES ($1) RETURNING id`,
-            ['Your Organization']
+            `INSERT INTO tenants (name, credits) VALUES ($1, $2) RETURNING id`,
+            ['Your Organization', 20000]
           );
           const tenantId = tenantRes.rows[0].id;
+          const firstEmail = profile.emails[0];
+          const name = profile.name
+            ? profile.name.givenName || '' + profile.name.familyName
+            : '';
           const userRes = await client.query(
             `INSERT INTO users (name, email, selected_tenant_id) VALUES ($1, $2, $3) RETURNING id`,
-            [profile.name, profile.emails[0], tenantId]
+            [name, firstEmail.value, tenantId]
           );
           const userId = userRes.rows[0].id;
           await client.query(
@@ -193,6 +208,16 @@ export function makeGoogleStrategy() {
             [userId, tenantId]
           );
           tokenId = await createTokenRecord(userId);
+          await createConversation(
+            {
+              model_id: 'gpt-4',
+              temperature: 0.5,
+              name: 'New',
+              tenant_id: tenantId,
+              user_id: userId,
+            },
+            client
+          );
         }
 
         await client.query('COMMIT');
@@ -208,7 +233,8 @@ export function makeGoogleStrategy() {
         });
       } catch (e) {
         await client.query('ROLLBACK');
-        done(e as Error);
+        logger.error(e);
+        done('Failed to login');
       } finally {
         client.release();
       }

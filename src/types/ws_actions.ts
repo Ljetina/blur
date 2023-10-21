@@ -17,4 +17,5 @@ export type SERVER_ACTION =
   | 'function_result'
   | 'response_error'
   | 'out_of_credits'
-  | 'remaining_credits';
+  | 'remaining_credits'
+  | 'credit_topup';

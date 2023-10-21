@@ -28,20 +28,20 @@ async function callConversationCompletion(
   conversationId: string,
   notebook?: string
 ) {
-  const { messages, conversation } = await prepareMessages(
-    conversationId,
-    // query,
-    notebook
-  );
+//   const { messages } = await prepareMessages(
+//     conversationId,
+//     // query,
+//     notebook
+//   );
 
-  const functions = await getFunctions({ conversation });
+//   const functions = await getFunctions({ conversation });
 
-  await startCompletion({
-    model: conversation.model_id as any,
-    messages,
-    functions: functions,
-    streaming: false,
-  });
+//   await startCompletion({
+//     model: conversation.model_id as any,
+//     messages,
+//     functions: functions,
+//     streaming: false,
+//   });
 }
 
 async function startCompletion({

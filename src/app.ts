@@ -20,13 +20,24 @@ import {
 } from './routes/conversation/notebook/notebook';
 import { handleCreateUserNotebook } from './routes/user/notebook/notebook';
 import { startWsServer } from './stream/wschat';
+import { stripeCallbackHandler } from './routes/stripe/webhook';
+import bodyParser from 'body-parser';
 
 export function prepareApp(sessionMiddleware: any) {
   const app = express();
 
-  app.use(express.json());
   app.use(morganMiddleware);
+  app.use(
+    '/stripe/webhook',
+    bodyParser.raw({ type: '*/*' }),
+    stripeCallbackHandler
+  );
+  app.use(express.json());
+
   addAuthRoutes(app, sessionMiddleware);
+  // app.use('*', (req, res) => {
+  //   return res.status(401).json({ error: 'Unauthorized' });
+  // });
   app.get('/initial', authenticate, initialDataHandler);
   app.post('/conversation', authenticate, handleCreateConversation);
   app.delete('/conversation/:id', authenticate, handleDeleteConversation);

@@ -1,0 +1,24 @@
+[Unit]
+Description=Blur API
+Requires=docker.service
+After=docker.service
+
+[Service]
+WorkingDirectory=/path/to/your/app
+
+# Restart on crash
+Restart=always
+
+# Remove old containers before starting
+ExecStartPre=/usr/local/bin/docker-compose down -v
+ExecStartPre=/usr/local/bin/docker-compose rm -fsv
+ExecStartPre=-/usr/local/bin/docker-compose pull
+
+# Compose up
+ExecStart=/usr/local/bin/docker-compose up
+
+# Compose down, remove containers and volumes
+ExecStop=/usr/local/bin/docker-compose down -v
+
+[Install]
+WantedBy=multi-user.target

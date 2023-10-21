@@ -15,6 +15,9 @@ import { Server } from 'http';
 import { verifyClient } from '../lib/auth';
 import { Conversation } from '@App/types/model';
 
+const tenantConnections: Record<string, WebSocket> = {};
+const conversationConnections: Record<string, WebSocket> = {};
+
 export function startWsServer(server: Server) {
   const wss = new WebSocketServer({
     // port: 8080,
@@ -41,23 +44,36 @@ export function startWsServer(server: Server) {
     },
   });
 
-  const connections: Record<string, WebSocket> = {};
+  function cleanUpRecords(conversationId: string, tenantId: string) {
+    delete conversationConnections[conversationId];
+    if (tenantConnections[conversationId]) {
+      delete tenantConnections[conversationId];
+    }
+    if (conversationConnections[conversationId]) {
+      delete conversationConnections[conversationId];
+    }
+  }
 
   wss.on('connection', async (ws, req: Request) => {
     console.log('ws connection opened');
     // Parse the URL to get the conversation ID
     const pathName = url.parse(req.url).pathname;
     const conversationId = pathName?.split('/').pop() as string;
-    const conversation = await getConversation(conversationId);
-    // ws.send(makeResponse('start_frontend_function', payload));
+    conversationConnections[conversationId] = ws;
+    // @ts-ignore
+    const tenantId = req.tenant_id;
+    tenantConnections[tenantId] = ws;
 
     let cache: { notebook?: string } = {};
-    // const conversationId: string = '488f3c07-1f94-4c48-b124-d0c57ea3cdc6';
 
     ws.on('close', (code, reason) => {
       console.log(
         `WebSocket connection closed by the client. Code: ${code}, Reason: ${reason}`
       );
+      cleanUpRecords(conversationId, tenantId);
+    });
+    ws.on('error', () => {
+      cleanUpRecords(conversationId, tenantId);
     });
 
     ws.on('message', async (message: Buffer) => {
@@ -67,8 +83,7 @@ export function startWsServer(server: Server) {
       const userAction = action as USER_ACTION;
 
       if (userAction === 'create_message') {
-        console.log(conversation.tenant_id);
-        console.log(conversation.tenant_credits);
+        const conversation = await getConversation(conversationId);
         if (conversation.tenant_credits < 100) {
           console.log('sending out of credits');
           ws.send(makeResponse('out_of_credits', null));
@@ -96,13 +111,18 @@ export function startWsServer(server: Server) {
             }),
             cache,
           });
-          conversation.tenant_credits = await handleUsage(conversation, usage, ws);
+          conversation.tenant_credits = await handleUsage(
+            conversation,
+            usage,
+            ws
+          );
         } catch (e) {
           console.error('error in streaming primary request', e);
         }
       } else if (userAction === 'notebook_updated') {
         cache['notebook'] = text;
       } else if (userAction === 'frontend_function_result') {
+        const conversation = await getConversation(conversationId);
         const functionUuid = uuidv4();
         const responseAssistantUuid = uuidv4();
         const data = JSON.parse(text);
@@ -123,15 +143,33 @@ export function startWsServer(server: Server) {
               conversationId,
               assistantUuid: responseAssistantUuid,
             }),
+
             cache,
           });
-          conversation.tenant_credits = await handleUsage(conversation, usage, ws);
+          conversation.tenant_credits = await handleUsage(
+            conversation,
+            usage,
+            ws
+          );
         } catch (e) {
           console.error('error in streaming follow up assistant request', e);
         }
       }
     });
   });
+}
+
+export async function invoicePaymentReceived({
+  tenantId,
+  credits,
+}: {
+  tenantId: string;
+  credits: number;
+}) {
+  if (tenantConnections[tenantId]) {
+    const ws = tenantConnections[tenantId];
+    ws.send(makeResponse('credit_topup', { remainingCredits: credits }));
+  }
 }
 
 async function handleUsage(
@@ -148,7 +186,6 @@ async function handleUsage(
     prompt_tokens: usage.promptTokens,
     credits: credits,
   });
-  console.log({ remaining });
 
   ws.send(
     makeResponse('remaining_credits', { remainingCredits: remaining.credits })

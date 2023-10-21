@@ -1,12 +1,6 @@
 import https from 'node:https';
-import {
-  getMessagesForPrompt,
-} from './db';
-import {
-  Conversation,
-  DbMessage,
-  Message,
-} from '@App/types/model';
+import { getMessagesForPrompt } from './db';
+import { Conversation, DbMessage, Message } from '@App/types/model';
 import { countInputTokens, tokenLimitConversationHistory } from './token';
 import { SERVER_ACTION } from '@App/types/ws_actions';
 import { Function, getFunctions } from './functions';
@@ -116,6 +110,7 @@ export async function streamCompletion({
       },
       onError: (e) => {
         onEvent('response_error', { message: 'error handling request' });
+        reject(e);
       },
     })
       .then(resolve)
@@ -164,6 +159,7 @@ export async function prepareMessages(
     }
     return message;
   });
+  console.log({ conversation });
   const prompt = conversation.notebook_name
     ? datasciencePrompt + systemExtra
     : defaultPrompt;

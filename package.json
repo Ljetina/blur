@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "NODE_ENV=dev nodemon src/index.ts",
+    "dev": "NODE_EXTRA_CA_CERTS=./global-bundle.pem NODE_ENV=dev nodemon src/index.ts",
     "build": "tsc",
     "test": "PORT=7777 vitest"
   },
@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "axios": "^1.5.1",
+    "body-parser": "^1.20.2",
     "connect-pg-simple": "^9.0.0",
     "cookie": "^0.5.0",
     "cors": "^2.8.5",
@@ -47,6 +48,7 @@
     "passport": "^0.6.0",
     "passport-google-oauth20": "^2.0.0",
     "pg": "^8.11.3",
+    "stripe": "^14.0.0",
     "tiktoken-node": "^0.0.6",
     "uuid": "^9.0.1",
     "winston": "^3.10.0",
