@@ -21,7 +21,7 @@ services:
       - app-network
 
   db:
-    image: postgres   
+    image: ankane/pgvector:v0.5.1   
     restart: always
     env_file:
       - ../.env.db  # loading POSTGRES_USER and POSTGRES_PASSWORD from .env.db
