@@ -1,12 +1,18 @@
 import { Conversation, FullConversation } from '@App/types/model';
 
-type FunctionName = 'add_cell' | 'update_cell' | 'delete_cell' | 'read_cells';
+type FunctionName =
+  | 'add_cell'
+  | 'update_cell'
+  | 'delete_cell'
+  | 'read_cells'
+  | 'read_cell_output';
 
 export const FRONTEND_FUNCTIONS: FunctionName[] = [
   'add_cell',
   'update_cell',
   'delete_cell',
   'read_cells',
+  'read_cell_output',
 ];
 
 interface Property {
@@ -27,23 +33,7 @@ export async function getFunctions({
 }: {
   conversation: Conversation;
 }) {
-  let functions: Function[] = [
-    // {
-    //   name: 'dummy',
-    //   description:
-    //     "This function does nothing, nothing I say. I'm just using it to see what kind of api usage these descriptions lead to.",
-    //   parameters: {
-    //     type: 'object',
-    //     properties: {
-    //       argumentative: {
-    //         type: 'boolean',
-    //         description: 'Whether the user is argumentative',
-    //       },
-    //     },
-    //     required: ['argumentative'],
-    //   },
-    // },
-  ];
+  let functions: Function[] = [];
   if (conversation.notebook_path) {
     functions = functions.concat(notebookFunctions);
   }
@@ -54,6 +44,20 @@ export async function getFunctions({
 }
 
 const notebookFunctions: Function[] = [
+  {
+    name: 'read_cell_output',
+    description: 'Read the last output of the cell at index',
+    parameters: {
+      type: 'object',
+      properties: {
+        index: {
+          type: 'number',
+          description: 'The index of the cell',
+        },
+      },
+      required: ['index'],
+    },
+  },
   {
     name: 'add_cell',
     description: 'Add a cell to the notebook and run it',
@@ -106,7 +110,7 @@ const notebookFunctions: Function[] = [
   },
   {
     name: 'read_cells',
-    description: 'Read all cells from the notebook',
+    description: 'Read all cells from the notebook, this will only update the source, not the outputs',
     parameters: {
       type: 'object',
       properties: {},
