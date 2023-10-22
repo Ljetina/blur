@@ -136,7 +136,7 @@ export async function prepareMessages(
     tokenConversationBudget = 1500;
     tokenSimilarBudget = 500;
   } else if (conversation.model_id === 'gpt-4') {
-    tokenConversationBudget = 4000;
+    tokenConversationBudget = 2000;
     tokenSimilarBudget = 1000;
   } else {
     tokenConversationBudget = 2000;
