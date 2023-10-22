@@ -61,8 +61,7 @@ export async function initialServerData(userId: string, tenantId: string) {
       'jupyter_settings', json_build_object(
         'host', coalesce(jupyter_settings.host, ''),
         'port', coalesce(jupyter_settings.port, ''),
-        'token', coalesce(jupyter_settings.token, ''),
-        'notebooks_folder_path', coalesce(jupyter_settings.notebooks_folder_path, '')
+        'token', coalesce(jupyter_settings.token, '')
       ),
       'conversations', 
         (SELECT json_agg(
