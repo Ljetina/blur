@@ -7,14 +7,14 @@ export const handleCreateUserNotebook = async (req: Request, res: Response) => {
     const { host, port, serverToken } = req.body;
 
     const upsertQuery = `
-        INSERT INTO jupyter_settings (id, user_id, host, port, token, notebooks_folder_path)
+        INSERT INTO jupyter_settings (id, user_id, host, port, token)
         VALUES (uuid_generate_v4(), $1, $2, $3, $4)
         ON CONFLICT (user_id)
         DO UPDATE SET
           host = $2,
           port = $3,
-          token = $4,
-        RETURNING host, port, token, notebooks_folder_path
+          token = $4
+        RETURNING host, port, token
       `;
     const upsertValues = [user_id, host, port, serverToken];
 
