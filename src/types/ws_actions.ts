@@ -5,7 +5,8 @@ export type USER_ACTION =
   | 'reject'
   | 'reload'
   | 'frontend_function_result'
-  | 'notebook_updated';
+  | 'notebook_updated'
+  | 'abort';
 
 export type SERVER_ACTION =
   | 'message_ack'

@@ -82,10 +82,12 @@ export async function streamCompletion({
   conversation,
   onEvent,
   cache,
+  flags,
 }: {
   conversation: Conversation;
   onEvent: (type: SERVER_ACTION, payload: any) => void;
   cache?: any;
+  flags: { shouldAbort: boolean; hasAborted: boolean };
 }): Promise<{ promptTokens: number; completionTokens: number }> {
   console.log({ cache });
   const { messages } = await prepareMessages(conversation, cache['notebook']);
@@ -112,6 +114,7 @@ export async function streamCompletion({
         onEvent('response_error', { message: 'error handling request' });
         reject(e);
       },
+      flags,
     })
       .then(resolve)
       .catch(reject);
@@ -191,12 +194,14 @@ export async function startCompletion({
   functions,
   onChunk,
   onError,
+  flags,
 }: {
   model: 'gpt-3.5-turbo' | 'gpt-4';
   messages: Message[];
   functions?: Function[];
   onChunk: (chunk: Chunk) => void;
   onError: (e: any) => void;
+  flags: { shouldAbort: boolean; hasAborted: boolean };
 }): Promise<{ promptTokens: number; completionTokens: number }> {
   // console.log({ messages });
   const requestUsage: RequestUsage = {
@@ -224,6 +229,10 @@ export async function startCompletion({
         announceEnd();
       });
       res.on('data', (d) => {
+        if (flags.shouldAbort && !flags.hasAborted) {
+          flags.hasAborted = true;
+          announceEnd();
+        }
         const rawChunk = d.toString('utf-8');
         // JSON.parse(rawChunk)
         // console.log('openai data', rawChunk);

@@ -63,6 +63,7 @@ export function startWsServer(server: Server) {
     // @ts-ignore
     const tenantId = req.tenant_id;
     tenantConnections[tenantId] = ws;
+    const flags = { hasAborted: false, shouldAbort: false };
 
     ws.on('ping', () => {
       console.log('Received ping from client');
@@ -118,6 +119,7 @@ export function startWsServer(server: Server) {
               conversationId,
             }),
             cache,
+            flags,
           });
           conversation.tenant_credits = await handleUsage(
             conversation,
@@ -151,8 +153,8 @@ export function startWsServer(server: Server) {
               conversationId,
               assistantUuid: responseAssistantUuid,
             }),
-
             cache,
+            flags,
           });
           conversation.tenant_credits = await handleUsage(
             conversation,
@@ -162,6 +164,9 @@ export function startWsServer(server: Server) {
         } catch (e) {
           console.error('error in streaming follow up assistant request', e);
         }
+      } else if (userAction === 'abort') {
+        flags.shouldAbort = true;
+        ws.send(makeResponse('response_done'));
       }
     });
   });
