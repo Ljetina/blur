@@ -51,4 +51,6 @@ export interface Conversation {
   user_id: string;
   tenant_id: string;
   tenant_credits: number;
+  system_memory: string;
+  temperature: number;
 }

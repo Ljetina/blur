@@ -232,6 +232,8 @@ export async function getConversation(
           conversation_notebook.kernel_id AS notebook_kernel_id,
           conversations.tenant_id,
           conversations.user_id,
+          conversations.system_memory,
+          conversations.temperature,
           tenants.credits AS tenant_credits
         FROM conversations
         LEFT JOIN conversation_notebook ON conversation_notebook.conversation_id = conversations.id
@@ -242,6 +244,23 @@ export async function getConversation(
   );
   const row = resp.rows[0];
   return row;
+}
+
+export async function updateSystemMemory(
+  conversationId: string,
+  newMemory: string
+): Promise<boolean> {
+  const updated = await withDbClient(
+    async (client) =>
+      await client.query(
+        `UPDATE conversations
+         SET system_memory = $1
+         WHERE id = $2`,
+        [newMemory, conversationId]
+      )
+  );
+  // Return true if at least one row was updated.
+  return updated.rowCount > 0;
 }
 
 export async function getMessagesForPrompt(

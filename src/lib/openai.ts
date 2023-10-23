@@ -1,10 +1,16 @@
 import https from 'node:https';
+import fs from 'node:fs';
 import { getMessagesForPrompt } from './db';
 import { Conversation, DbMessage, Message } from '@App/types/model';
 import { countInputTokens, tokenLimitConversationHistory } from './token';
 import { SERVER_ACTION } from '@App/types/ws_actions';
 import { Function, getFunctions } from './functions';
-import { datasciencePrompt, defaultPrompt } from './prompts';
+import {
+  addConversationMemory,
+  addNotebook,
+  datasciencePrompt,
+  defaultPrompt,
+} from './prompts';
 import { logger } from './log';
 import { RequestUsage } from './pricing';
 
@@ -58,6 +64,13 @@ export const makeChoiceHandler = (
       }
     } else if (c.delta && c.finish_reason === 'function_call') {
       if (acc.name && acc.arguments) {
+        if (['add_cell', 'update_cell'].includes(acc.name)) {
+          try {
+            JSON.parse(acc.arguments);
+          } catch (e) {
+            console.log('unparseable arguments', acc.arguments);
+          }
+        }
         onEvent('start_function', {
           functionName: acc.name,
           functionArguments: acc.arguments,
@@ -89,8 +102,11 @@ export async function streamCompletion({
   cache?: any;
   flags: { shouldAbort: boolean; hasAborted: boolean };
 }): Promise<{ promptTokens: number; completionTokens: number }> {
-  console.log({ cache });
-  const { messages } = await prepareMessages(conversation, cache['notebook']);
+  const { messages } = await prepareMessages(
+    conversation,
+    (addConversationMemory(conversation.system_memory) || '') +
+      (addNotebook(cache['notebook']) || '')
+  );
 
   const functions = await getFunctions({ conversation });
   // console.log('last message');
@@ -104,6 +120,8 @@ export async function streamCompletion({
       model: conversation.model_id as 'gpt-4' | 'gpt-3.5-turbo',
       messages: messages,
       functions: functions,
+      user: conversation.tenant_id,
+      temperature: conversation.temperature,
       onChunk: (c: Chunk) => {
         if (c.choices && c.choices.length > 0) {
           const choice = c.choices[0];
@@ -123,7 +141,6 @@ export async function streamCompletion({
 
 export async function prepareMessages(
   conversation: Conversation,
-  query?: string,
   systemExtra?: string
 ): Promise<{
   messages: Message[];
@@ -162,7 +179,15 @@ export async function prepareMessages(
     }
     return message;
   });
-  console.log({ conversation });
+
+  // const firstMessage = promptMessages[0];
+  // promptMessages.reverse()
+  // for (let i = 0; i < promptMessages.length; ++i) {
+
+  // }
+
+  // promptMessages.reverse()
+  // console.log({ conversation });
   const prompt = conversation.notebook_name
     ? datasciencePrompt + systemExtra
     : defaultPrompt;
@@ -170,9 +195,8 @@ export async function prepareMessages(
     promptMessages
   );
 
-  if (query) {
-    promptMessages.push({ role: 'user', content: query });
-  }
+  // logger.info('SYSTEM', prompt);
+
   promptMessages = tokenLimitConversationHistory(
     promptMessages,
     tokenConversationBudget
@@ -192,6 +216,8 @@ export async function startCompletion({
   model = 'gpt-3.5-turbo',
   messages,
   functions,
+  user,
+  temperature,
   onChunk,
   onError,
   flags,
@@ -199,6 +225,8 @@ export async function startCompletion({
   model: 'gpt-3.5-turbo' | 'gpt-4';
   messages: Message[];
   functions?: Function[];
+  user: string;
+  temperature: number;
   onChunk: (chunk: Chunk) => void;
   onError: (e: any) => void;
   flags: { shouldAbort: boolean; hasAborted: boolean };
@@ -269,7 +297,11 @@ export async function startCompletion({
                 onError(parsedJSON.error);
               }
             } catch (e) {
-              logger.error('error parsing non-data chunk as json', e);
+              logger.error(
+                'error parsing non-data chunk as json',
+                e,
+                joinedChunks
+              );
             }
             nonDataChunks = [];
           }
@@ -280,14 +312,63 @@ export async function startCompletion({
     req.on('error', (e) => {
       reject(e);
     });
-    req.write(
-      JSON.stringify({
-        model,
-        messages,
-        functions,
-        stream: true,
-      })
-    );
+    const payload = JSON.stringify({
+      model,
+      messages,
+      functions,
+      stream: true,
+      temperature,
+      // max_tokens: 100,
+      user,
+    });
+    // fs.writeFileSync('payload.json', payload);
+    // logger.info('!!!!!');
+    // logger.info(payload);
+    // logger.info('!!!!!');
+    req.write(payload);
+    req.end();
+  });
+}
+
+export async function startCompletionSimplified(
+  payload: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      res.on('close', () => {
+        console.log('openai close');
+      });
+      res.on('end', () => {
+        console.log('openai end');
+      });
+      res.on('data', (d) => {
+        const rawChunk = d.toString('utf-8');
+        console.log(rawChunk);
+        const lines = rawChunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataChunk = line.slice(6, line.length);
+            if (!dataChunk.startsWith('[DONE]')) {
+              // console.log('Data chunk:', dataChunk);
+            } else {
+              console.log('DONE');
+              resolve();
+            }
+          }
+        }
+      });
+    });
+
+    req.on('error', (e) => {
+      console.error('Request error:', e);
+      reject(e);
+    });
+
+    // console.log('Payload:');
+    // console.log('\n\n\n\n');
+    // console.log(payload);
+    // console.log('\n\n\n\n');
+    req.write(payload);
     req.end();
   });
 }

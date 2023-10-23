@@ -26,7 +26,21 @@ Some best practices for python code:
 Some guidance on interacting with the user;
 - The user can see this notebook and the resulting execution, so you only have to discuss details about the code, instead of repeating the code in your answers.
 
+Start each user interaction with a function call to update_memory. Keep relevant bits about the conversation in there to keep them from scrolling out of your context window.
+
 `;
+
+export const addConversationMemory = (m?: string | null) => {
+  return m
+    ? `
+## Conversation Memory
+
+${m}
+
+## End Conversation Memory
+  `
+    : '';
+};
 
 export const addNotebook = (n: string | undefined) =>
   n
@@ -36,7 +50,7 @@ export const addNotebook = (n: string | undefined) =>
 
 ${n}
 
-END Data
+## END Data
 
 `
     : '';

@@ -6,7 +6,8 @@ const encoding = tiktoken.getEncoding('cl100k_base');
 
 export function tokenLimitConversationHistory(
   messages: Message[],
-  tokenBudget = 4000
+  tokenBudget = 4000,
+  messageLimit = 10
 ) {
   const encodingLengths = messages.map((m) => {
     const contentToCount: string = m.function_call
@@ -32,7 +33,7 @@ export function tokenLimitConversationHistory(
   remainingEncodingLengths = remainingEncodingLengths.reverse();
 
   const messageAcc = [];
-  for (let i = 0; i < remainingMessages.length; i++) {
+  for (let i = 0; i < Math.min(remainingMessages.length, messageLimit); i++) {
     if (remainingEncodingLengths[i] > tokenBudgetRemaining) {
       continue;
     } else {

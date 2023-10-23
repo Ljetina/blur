@@ -33,8 +33,23 @@ export async function getFunctions({
 }: {
   conversation: Conversation;
 }) {
-  let functions: Function[] = [];
-  if (conversation.notebook_path) {
+  let functions: Function[] = [
+    // {
+    //   name: 'update_memory',
+    //   description: 'Updates the system memory managed by you and included in the system message',
+    //   parameters: {
+    //     type: 'object',
+    //     properties: {
+    //       value: {
+    //         type: 'string',
+    //         description: 'update your memory snippet about the conversation. Max 100 tokens.',
+    //       },
+    //     },
+    //     required: ['value'],
+    //   },
+    // },
+  ];
+  if (conversation.notebook_session_id) {
     functions = functions.concat(notebookFunctions);
   }
   if (functions.length == 0) {
@@ -110,7 +125,8 @@ const notebookFunctions: Function[] = [
   },
   {
     name: 'read_cells',
-    description: 'Read all cells from the notebook, this will only update the source, not the outputs',
+    description:
+      'Read all cells from the notebook, this will only update the source, not the outputs',
     parameters: {
       type: 'object',
       properties: {},

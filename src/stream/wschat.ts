@@ -8,12 +8,14 @@ import {
   getConversation,
   storeApiUsage,
   storeMessages,
+  updateSystemMemory,
 } from '../lib/db';
 import { FRONTEND_FUNCTIONS } from '../lib/functions';
 import { RequestUsage, tokensToCredits } from '../lib/pricing';
 import { Server } from 'http';
 import { verifyClient } from '../lib/auth';
 import { Conversation } from '@App/types/model';
+import { logger } from '../lib/log';
 
 const tenantConnections: Record<string, WebSocket> = {};
 const conversationConnections: Record<string, WebSocket> = {};
@@ -222,10 +224,9 @@ function makeCompletionHandler(
 ): (type: SERVER_ACTION, payload: any) => void {
   return async (type, payload) => {
     if (type == 'append_to_message') {
-      ws.send(makeResponse(type, payload));
+      sendAndLog(ws, 'append_to_message', payload);
     } else if (type == 'response_done') {
-      ws.send(makeResponse(type));
-      // console.log({ payload });
+      sendAndLog(ws, 'response_done');
       const assistantMessage = {
         conversation_id: conversationId,
         message_id: assistantUuid,
@@ -235,10 +236,7 @@ function makeCompletionHandler(
       await storeMessages([assistantMessage]);
     } else if (type == 'start_function') {
       if (FRONTEND_FUNCTIONS.includes(payload.functionName)) {
-        console.log(
-          new Date(),
-          'storing assistant message with function payload'
-        );
+        logger.info('storing assistant message with function payload');
         const assistantMessage: InputMessage = {
           conversation_id: conversationId,
           message_id: assistantUuid,
@@ -250,12 +248,26 @@ function makeCompletionHandler(
         };
 
         await storeMessages([assistantMessage]);
-        ws.send(makeResponse('start_frontend_function', payload));
+        sendAndLog(ws, 'start_frontend_function', payload);
       } else {
-        ws.send(makeResponse('start_function', payload));
+        if (payload.functionName == 'update_memory') {
+          await updateSystemMemory(
+            conversationId,
+            JSON.parse(payload.functionArguments).value
+          );
+        }
+        sendAndLog(ws, 'start_function', payload);
       }
     } else if (type === 'response_error') {
-      ws.send(makeResponse('response_error', payload));
+      sendAndLog(ws, 'response_error', payload);
     }
   };
+}
+
+function sendAndLog(ws: WebSocket, action: SERVER_ACTION, payload?: any) {
+  const toSend = makeResponse(action, payload);
+  if (process.env.NODE_ENV !== 'production') {
+    logger.info(toSend);
+  }
+  ws.send(toSend);
 }
