@@ -263,6 +263,26 @@ export async function updateSystemMemory(
   return updated.rowCount > 0;
 }
 
+export async function deleteNewerMessages(
+  messageId: string,
+  conversationId: string
+): Promise<void> {
+  console.log('DELETE', messageId, conversationId);
+  await withDbClient(async (client) => {
+    // Delete all messages that have a created_at timestamp later than the fetched timestamp
+    const deleteQuery = `
+      DELETE FROM messages
+      WHERE created_at > (
+        SELECT created_at
+        FROM messages
+        WHERE id = $1 AND conversation_id = $2
+      ) AND conversation_id = $2 AND role != 'system';
+    `;
+
+    await client.query(deleteQuery, [messageId, conversationId]);
+  });
+}
+
 export async function getMessagesForPrompt(
   conversationId: string
 ): Promise<DbMessage[]> {

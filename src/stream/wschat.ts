@@ -5,6 +5,7 @@ import { SERVER_ACTION, USER_ACTION } from '../types/ws_actions';
 import { streamCompletion } from '../lib/openai';
 import {
   InputMessage,
+  deleteNewerMessages,
   getConversation,
   storeApiUsage,
   storeMessages,
@@ -89,11 +90,38 @@ export function startWsServer(server: Server) {
         ws.send('pong');
         return;
       }
-      console.log('on message', stringMessage);
       const { action, text } = JSON.parse(stringMessage);
       const userAction = action as USER_ACTION;
 
-      if (userAction === 'create_message') {
+      if (userAction === 'regenerate_message') {
+        const conversation = await getConversation(conversationId);
+        await deleteNewerMessages(text, conversationId);
+        const assistantUuid = uuidv4();
+        ws.send(
+          makeResponse('message_regenerate_ack', {
+            userUuid: text,
+            assistantUuid,
+          })
+        );
+        try {
+          const usage = await streamCompletion({
+            conversation,
+            onEvent: makeCompletionHandler(ws, {
+              assistantUuid,
+              conversationId,
+            }),
+            cache,
+            flags,
+          });
+          conversation.tenant_credits = await handleUsage(
+            conversation,
+            usage,
+            ws
+          );
+        } catch (e) {
+          console.error('error in streaming regenerate request', e);
+        }
+      } else if (userAction === 'create_message') {
         const conversation = await getConversation(conversationId);
         if (conversation.tenant_credits < 100) {
           console.log('sending out of credits');
