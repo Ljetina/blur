@@ -17,6 +17,7 @@ import { Server } from 'http';
 import { verifyClient } from '../lib/auth';
 import { Conversation } from '@App/types/model';
 import { logger } from '../lib/log';
+import { countTokens, tokenLimitNotebook } from '../lib/token';
 
 const tenantConnections: Record<string, WebSocket> = {};
 const conversationConnections: Record<string, WebSocket> = {};
@@ -160,7 +161,14 @@ export function startWsServer(server: Server) {
           console.error('error in streaming primary request', e);
         }
       } else if (userAction === 'notebook_updated') {
-        cache['notebook'] = text;
+        const [content, cellCount, tokenCount] = tokenLimitNotebook(text);
+        cache['notebook'] = content;
+        ws.send(
+          makeResponse('notebook_cache', {
+            size: tokenCount,
+            cells: cellCount,
+          })
+        );
       } else if (userAction === 'frontend_function_result') {
         const conversation = await getConversation(conversationId);
         const functionUuid = uuidv4();

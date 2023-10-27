@@ -4,6 +4,31 @@ import { Function } from './functions';
 
 const encoding = tiktoken.getEncoding('cl100k_base');
 
+export function countTokens(input: string) {
+  return encoding.encode(input).length;
+}
+
+export function tokenLimitNotebook(input: string) {
+  const tokenCount = countTokens(input);
+  const notebook = JSON.parse(input);
+  let selectedNotebookContent = input;
+  if (tokenCount > 1500) {
+    let selectedCells = notebook.slice(0, 2);
+    selectedCells.push(notebook[notebook.length - 1]);
+    for (let i = notebook.length - 2; i >= 2; i--) {
+      let potentialCells = selectedCells.concat(notebook[i]);
+      if (countTokens(JSON.stringify(potentialCells)) <= 1500) {
+        selectedCells = potentialCells;
+      } else {
+        break;
+      }
+    }
+    selectedCells.sort((a: any, b: any) => a.index - b.index);
+    selectedNotebookContent = JSON.stringify(selectedCells);
+  }
+  return [selectedNotebookContent, notebook.length, tokenCount];
+}
+
 export function tokenLimitConversationHistory(
   messages: Message[],
   tokenBudget = 4000,
@@ -11,7 +36,8 @@ export function tokenLimitConversationHistory(
 ) {
   const encodingLengths = messages.map((m) => {
     const contentToCount: string = m.function_call
-      ? m.function_call.name + m.function_call.name
+      ? // TODO check this looks like duplication
+        m.function_call.name + m.function_call.name
       : (m.content as string);
     if (!contentToCount) {
       return 0;
@@ -19,14 +45,21 @@ export function tokenLimitConversationHistory(
     return encoding.encode(contentToCount).length;
   });
   let tokenBudgetRemaining = tokenBudget;
+  if (messages.length <= 4) {
+    return messages;
+  }
 
-  const firstMessage = messages[0];
-  tokenBudgetRemaining -= encodingLengths[0];
+  const firstTwoMessages = messages.slice(0, 2);
+  const lastTwoMessages = messages.slice(-2);
 
-  const secondMessage = messages[1];
-  tokenBudgetRemaining -= encodingLengths[1];
+  tokenBudgetRemaining -=
+    // Exclude the system message from this budget
+    // encodingLengths[0] +
+    encodingLengths[1] +
+    encodingLengths[encodingLengths.length - 1] +
+    encodingLengths[encodingLengths.length - 2];
 
-  let remainingMessages = messages.slice(2);
+  let remainingMessages = messages.slice(2, -2);
   remainingMessages = remainingMessages.reverse();
 
   let remainingEncodingLengths = encodingLengths.slice(2);
@@ -41,10 +74,13 @@ export function tokenLimitConversationHistory(
       messageAcc.push(remainingMessages[i]);
     }
   }
-  const filteredMessages = [firstMessage, secondMessage].concat(
-    messageAcc.reverse()
+  const filteredMessages = firstTwoMessages
+    .concat(messageAcc.reverse())
+    .concat(lastTwoMessages);
+  console.log(
+    'id',
+    filteredMessages.map((m) => m.content?.substring(0, 20) || m.name)
   );
-  console.log('id', filteredMessages.map(m => m.content?.substring(0, 20)))
 
   return filteredMessages;
 }

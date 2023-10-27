@@ -14,6 +14,7 @@ export type SERVER_ACTION =
   | 'message_regenerate_ack'
   | 'append_to_message'
   // | 'request_confirm'
+  | 'notebook_cache'
   | 'response_done'
   | 'start_function'
   | 'start_frontend_function'

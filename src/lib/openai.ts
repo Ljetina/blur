@@ -2,7 +2,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import { getMessagesForPrompt } from './db';
 import { Conversation, DbMessage, Message } from '@App/types/model';
-import { countInputTokens, tokenLimitConversationHistory } from './token';
+import { countInputTokens, countTokens, tokenLimitConversationHistory } from './token';
 import { SERVER_ACTION } from '@App/types/ws_actions';
 import { Function, getFunctions } from './functions';
 import {
@@ -191,6 +191,7 @@ export async function prepareMessages(
   const prompt = conversation.notebook_name
     ? datasciencePrompt + systemExtra
     : defaultPrompt;
+  console.log('prompt size', countTokens(prompt))
   promptMessages = ([{ role: 'system', content: prompt }] as Message[]).concat(
     promptMessages
   );
