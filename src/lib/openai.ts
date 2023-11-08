@@ -2,7 +2,11 @@ import https from 'node:https';
 import fs from 'node:fs';
 import { getMessagesForPrompt } from './db';
 import { Conversation, DbMessage, Message } from '@App/types/model';
-import { countInputTokens, countTokens, tokenLimitConversationHistory } from './token';
+import {
+  countInputTokens,
+  countTokens,
+  tokenLimitConversationHistory,
+} from './token';
 import { SERVER_ACTION } from '@App/types/ws_actions';
 import { Function, getFunctions } from './functions';
 import {
@@ -191,7 +195,7 @@ export async function prepareMessages(
   const prompt = conversation.notebook_name
     ? datasciencePrompt + systemExtra
     : defaultPrompt;
-  console.log('prompt size', countTokens(prompt))
+  console.log('prompt size', countTokens(prompt));
   promptMessages = ([{ role: 'system', content: prompt }] as Message[]).concat(
     promptMessages
   );
@@ -223,7 +227,7 @@ export async function startCompletion({
   onError,
   flags,
 }: {
-  model: 'gpt-3.5-turbo' | 'gpt-4';
+  model: 'gpt-3.5-turbo' | 'gpt-4' | 'gpt-4-1106-preview';
   messages: Message[];
   functions?: Function[];
   user: string;
@@ -248,6 +252,7 @@ export async function startCompletion({
       }
     }
     const req = https.request(options, (res) => {
+      let buffer = '';
       // console.log('statusCode:', res.statusCode);
       res.on('close', () => {
         console.log('openai close');
@@ -263,12 +268,14 @@ export async function startCompletion({
           announceEnd();
         }
         const rawChunk = d.toString('utf-8');
-        // JSON.parse(rawChunk)
-        // console.log('openai data', rawChunk);
-        const lines = rawChunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const payload = line.slice(6, line.length);
+        buffer += rawChunk;
+        let endOfMessageIndex = buffer.indexOf('\n\n');
+        while (endOfMessageIndex !== -1) {
+          const rawMessage = buffer.substring(0, endOfMessageIndex);
+          buffer = buffer.substring(endOfMessageIndex + 2); // +2 to remove the newline characters
+
+          if (rawMessage.startsWith('data: ')) {
+            const payload = rawMessage.slice(6, rawMessage.length);
             // console.log({ payload });
             if (!payload.startsWith('[DONE]')) {
               requestUsage.completionTokens += 1;
@@ -281,14 +288,15 @@ export async function startCompletion({
                   onChunk(message);
                 }
               } catch (e) {
-                logger.error('error parsing data chunk as json', e);
+                logger.info('payload: ', payload);
+                logger.error('error parsing data chunk as json', e, rawMessage);
               }
             } else {
               announceEnd();
             }
-          } else if (line.length > 0) {
-            console.log('non data chunk', line);
-            nonDataChunks.push(line);
+          } else if (rawMessage.length > 0) {
+            console.log('non data chunk', rawMessage);
+            nonDataChunks.push(rawMessage);
           } else if (nonDataChunks.length > 0) {
             console.log('empty line');
             const joinedChunks = nonDataChunks.join('\n');
@@ -306,6 +314,7 @@ export async function startCompletion({
             }
             nonDataChunks = [];
           }
+          endOfMessageIndex = buffer.indexOf('\n\n');
         }
       });
     });
