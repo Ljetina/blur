@@ -2,7 +2,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import url from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { SERVER_ACTION, USER_ACTION } from '../types/ws_actions';
-import { streamCompletion } from '../lib/openai';
+import { streamCompletion, streamImageInterpretation } from '../lib/openai';
 import {
   InputMessage,
   deleteNewerMessages,
@@ -162,6 +162,7 @@ export function startWsServer(server: Server) {
         }
       } else if (userAction === 'notebook_updated') {
         const [content, cellCount, tokenCount] = tokenLimitNotebook(text);
+        // console.log({ content });
         cache['notebook'] = content;
         ws.send(
           makeResponse('notebook_cache', {
@@ -174,33 +175,65 @@ export function startWsServer(server: Server) {
         const functionUuid = uuidv4();
         const responseAssistantUuid = uuidv4();
         const data = JSON.parse(text);
-        console.log(new Date(), 'storing function result', data);
-        await storeMessages([
-          {
-            conversation_id: conversationId,
-            message_id: functionUuid,
-            role: 'function',
-            message_content: data.content,
-            name: data.name,
-          },
-        ]);
-        try {
-          const usage = await streamCompletion({
-            conversation,
-            onEvent: makeCompletionHandler(ws, {
-              conversationId,
-              assistantUuid: responseAssistantUuid,
-            }),
-            cache,
-            flags,
-          });
-          conversation.tenant_credits = await handleUsage(
-            conversation,
-            usage,
-            ws
-          );
-        } catch (e) {
-          console.error('error in streaming follow up assistant request', e);
+        // console.log({ data });
+        // console.log({ content: data.content });
+        if (
+          ['read_cell_output', 'add_cell'].includes(data.name) &&
+          data.content.some((o: any) => o.output_type == 'display_data')
+        ) {
+          try {
+            for (let output of data.content) {
+              if (output.output_type == 'display_data') {
+              }
+            }
+            // console.log({ ac: data.content });
+            // console.log();
+            const usage = await streamImageInterpretation({
+              flags,
+              conversation,
+              cache,
+              image: data.content[0].data['image/png'],
+              onEvent: makeCompletionHandler(ws, {
+                conversationId,
+                assistantUuid: responseAssistantUuid,
+              }),
+            });
+            conversation.tenant_credits = await handleUsage(
+              conversation,
+              usage as RequestUsage,
+              ws
+            );
+          } catch (e) {
+            logger.error('error in streaming image cell output request', e);
+          }
+        } else {
+          await storeMessages([
+            {
+              conversation_id: conversationId,
+              message_id: functionUuid,
+              role: 'function',
+              message_content: JSON.stringify(data.content),
+              name: data.name,
+            },
+          ]);
+          try {
+            const usage = await streamCompletion({
+              conversation,
+              onEvent: makeCompletionHandler(ws, {
+                conversationId,
+                assistantUuid: responseAssistantUuid,
+              }),
+              cache,
+              flags,
+            });
+            conversation.tenant_credits = await handleUsage(
+              conversation,
+              usage,
+              ws
+            );
+          } catch (e) {
+            console.error('error in streaming follow up assistant request', e);
+          }
         }
       } else if (userAction === 'abort') {
         flags.shouldAbort = true;

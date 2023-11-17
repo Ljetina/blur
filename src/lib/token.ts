@@ -79,7 +79,10 @@ export function tokenLimitConversationHistory(
     .concat(lastTwoMessages);
   console.log(
     'id',
-    filteredMessages.map((m) => m.content?.substring(0, 20) || m.name)
+    filteredMessages
+      .filter((m) => typeof m.content == 'string')
+      // @ts-ignore
+      .map((m) => m.content?.substring(0, 20) || m.name)
   );
 
   return filteredMessages;
@@ -88,8 +91,21 @@ export function tokenLimitConversationHistory(
 export function countInputTokens(messages: Message[], functions?: Function[]) {
   let inputTokenCount = 0;
   for (const message of messages) {
-    inputTokenCount +=
-      encoding.encode(message.role + ' ' + message?.content).length + 4;
+    if (Array.isArray(message.content)) {
+      for (const content of message.content) {
+        if (content.type === 'text') {
+          inputTokenCount += encoding.encode(message.role + ' ' + content.text).length + 4;
+        } else if (content.type === 'image_url') {
+          if (content?.image_url?.detail === 'high') {
+            inputTokenCount += 129; // high detail image tokens
+          } else {
+            inputTokenCount += 65; // low detail image tokens
+          }
+        }
+      }
+    } else if (typeof message.content === 'string') {
+      inputTokenCount += encoding.encode(message.role + ' ' + message.content).length + 4;
+    }
   }
   inputTokenCount -= messages.length;
   inputTokenCount += 3;

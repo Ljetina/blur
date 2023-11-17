@@ -40,6 +40,7 @@ interface Choice {
     };
   };
   finish_reason: string | null;
+  finish_details?: unknown;
 }
 interface Chunk {
   id: string;
@@ -67,33 +68,106 @@ export const makeChoiceHandler = (
         acc.arguments += delta.function_call.arguments;
       }
     } else if (c.delta && c.finish_reason === 'function_call') {
+      let funcArgs = acc.arguments;
       if (acc.name && acc.arguments) {
         if (['add_cell', 'update_cell'].includes(acc.name)) {
           try {
-            JSON.parse(acc.arguments);
+            // Replace newlines within the matched string for "code"
+            let result = acc.arguments.replace(
+              /("code":\s*")([\s\S]*?)(")/g,
+              function (match, p1, p2, p3) {
+                // Replace newlines within the second group (p2) only
+                let replacedNewlines = p2.replace(/\n/g, '\\n');
+                // Return the modified string with escaped newlines
+                return p1 + replacedNewlines + p3;
+              }
+            );
+            JSON.parse(result);
+            funcArgs = result;
           } catch (e) {
             console.log('unparseable arguments', acc.arguments);
           }
         }
         onEvent('start_function', {
           functionName: acc.name,
-          functionArguments: acc.arguments,
+          functionArguments: funcArgs,
         });
       }
       acc.name = null;
       acc.arguments = '';
     } else if (c.delta && !c.delta?.function_call) {
       // Message delta handling
-      if (c.finish_reason) {
+      if (c.finish_reason || c.finish_details) {
         onEvent('response_done', acc.content);
         acc.content = '';
-      } else {
+      } else if (c.delta.content) {
         acc.content += c.delta.content;
         onEvent('append_to_message', c.delta.content);
       }
     }
   };
 };
+
+export async function streamImageInterpretation({
+  conversation,
+  image,
+  onEvent,
+  cache,
+  flags,
+}: {
+  conversation: Conversation;
+  image: string;
+  cache?: any;
+  onEvent: (type: SERVER_ACTION, payload: any) => void;
+  flags: { shouldAbort: boolean; hasAborted: boolean };
+}) {
+  const { messages } = await prepareMessages(
+    conversation,
+    (addConversationMemory(conversation.system_memory) || '') +
+      (addNotebook(cache['notebook']) || ''),
+    true // forVision
+  );
+
+  const interpretationUserMesssage = {
+    role: 'user',
+    content: [
+      {
+        type: 'text',
+        text: 'Given the context of the preceding conversation, what is the best short text description of the below chart or image?',
+      },
+      {
+        type: 'image_url',
+        image_url: {
+          url: `data:image/png;base64,${image}`,
+        },
+      },
+    ],
+  };
+
+  const choiceHandler = makeChoiceHandler(onEvent);
+  return new Promise((resolve, reject) => {
+    startCompletion({
+      model: 'gpt-4-vision-preview',
+      messages: messages.concat([interpretationUserMesssage]),
+      // functions: [],
+      user: conversation.tenant_id,
+      temperature: conversation.temperature,
+      onChunk: (c: Chunk) => {
+        if (c.choices && c.choices.length > 0) {
+          const choice = c.choices[0];
+          choiceHandler(choice);
+        }
+      },
+      onError: (e) => {
+        onEvent('response_error', { message: 'error handling request' });
+        reject(e);
+      },
+      flags,
+    })
+      .then(resolve)
+      .catch(reject);
+  });
+}
 
 export async function streamCompletion({
   conversation,
@@ -113,10 +187,6 @@ export async function streamCompletion({
   );
 
   const functions = await getFunctions({ conversation });
-  // console.log('last message');
-  // console.log(messages[messages.length - 1]);
-  // console.log('last message');
-  // console.log(messages);
 
   const choiceHandler = makeChoiceHandler(onEvent);
   return new Promise((resolve, reject) => {
@@ -145,7 +215,8 @@ export async function streamCompletion({
 
 export async function prepareMessages(
   conversation: Conversation,
-  systemExtra?: string
+  systemExtra?: string,
+  forVision = false
 ): Promise<{
   messages: Message[];
 }> {
@@ -159,30 +230,41 @@ export async function prepareMessages(
   } else if (conversation.model_id === 'gpt-4') {
     tokenConversationBudget = 2000;
     tokenSimilarBudget = 1000;
+  } else if (conversation.model_id === 'gpt-4-1106-preview') {
+    tokenConversationBudget = 10000;
+    tokenSimilarBudget = 0;
   } else {
     tokenConversationBudget = 2000;
     tokenSimilarBudget = 500;
   }
 
-  let promptMessages: Message[] = messages.map((i: DbMessage) => {
-    const message: Message = {
-      role: i.role,
-      content: null,
-    };
-    if (i.function_name) {
-      message.function_call = {
-        name: i.function_name as string,
-        arguments: i.function_arguments as string,
+  let promptMessages: Message[] = messages
+    .filter((i: DbMessage) => {
+      if (forVision) {
+        return !i.name && !i.function_name;
+      } else {
+        return true;
+      }
+    })
+    .map((i: DbMessage) => {
+      const message: Message = {
+        role: i.role,
+        content: null,
       };
-      message.content = null;
-    } else {
-      message.content = i.content || i.compressed_content || '';
-    }
-    if (i.name) {
-      message.name = i.name;
-    }
-    return message;
-  });
+      if (i.function_name) {
+        message.function_call = {
+          name: i.function_name as string,
+          arguments: i.function_arguments as string,
+        };
+        message.content = null;
+      } else {
+        message.content = i.content || i.compressed_content || '';
+      }
+      if (i.name) {
+        message.name = i.name;
+      }
+      return message;
+    });
 
   // const firstMessage = promptMessages[0];
   // promptMessages.reverse()
@@ -226,8 +308,13 @@ export async function startCompletion({
   onChunk,
   onError,
   flags,
+  max_tokens = 4096,
 }: {
-  model: 'gpt-3.5-turbo' | 'gpt-4' | 'gpt-4-1106-preview';
+  model:
+    | 'gpt-3.5-turbo'
+    | 'gpt-4'
+    | 'gpt-4-1106-preview'
+    | 'gpt-4-vision-preview';
   messages: Message[];
   functions?: Function[];
   user: string;
@@ -235,6 +322,7 @@ export async function startCompletion({
   onChunk: (chunk: Chunk) => void;
   onError: (e: any) => void;
   flags: { shouldAbort: boolean; hasAborted: boolean };
+  max_tokens?: number;
 }): Promise<{ promptTokens: number; completionTokens: number }> {
   // console.log({ messages });
   const requestUsage: RequestUsage = {
@@ -252,74 +340,102 @@ export async function startCompletion({
       }
     }
     const req = https.request(options, (res) => {
-      let buffer = '';
-      // console.log('statusCode:', res.statusCode);
-      res.on('close', () => {
-        console.log('openai close');
-        announceEnd();
-      });
-      res.on('end', () => {
-        console.log('openai end');
-        announceEnd();
-      });
-      res.on('data', (d) => {
-        if (flags.shouldAbort && !flags.hasAborted) {
-          flags.hasAborted = true;
-          announceEnd();
-        }
-        const rawChunk = d.toString('utf-8');
-        buffer += rawChunk;
-        let endOfMessageIndex = buffer.indexOf('\n\n');
-        while (endOfMessageIndex !== -1) {
-          const rawMessage = buffer.substring(0, endOfMessageIndex);
-          buffer = buffer.substring(endOfMessageIndex + 2); // +2 to remove the newline characters
+      // console.log('status', res.statusCode, res.headers);
+      const contentType = res.headers['content-type'];
 
-          if (rawMessage.startsWith('data: ')) {
-            const payload = rawMessage.slice(6, rawMessage.length);
-            // console.log({ payload });
-            if (!payload.startsWith('[DONE]')) {
-              requestUsage.completionTokens += 1;
+      // NON SSE handlers, mostly for errors
+      if (contentType?.includes('application/json')) {
+        console.log('json');
+        const chunks: Buffer[] = [];
+        res.on('data', (d) => {
+          chunks.push(d);
+        });
+        res.on('end', () => {
+          const parsedJson = JSON.parse(
+            chunks.map((b) => b.toString('utf-8')).join('')
+          );
+          if (parsedJson.error) {
+            onError(parsedJson.error);
+          }
+          announceEnd();
+        });
+      } else if (contentType?.includes('text/event-stream')) {
+        // console.log('sse');
+        let buffer = '';
+        // console.log('statusCode:', res.statusCode);
+        res.on('close', () => {
+          console.log('openai close');
+          announceEnd();
+        });
+        res.on('end', () => {
+          console.log('openai end');
+          announceEnd();
+        });
+        res.on('data', (d) => {
+          // console.log('data start', d.toString('utf-8'));
+          if (flags.shouldAbort && !flags.hasAborted) {
+            flags.hasAborted = true;
+            announceEnd();
+          }
+          const rawChunk = d.toString('utf-8');
+          buffer += rawChunk;
+          let endOfMessageIndex = buffer.indexOf('\n\n');
+          while (endOfMessageIndex !== -1) {
+            const rawMessage = buffer.substring(0, endOfMessageIndex);
+            buffer = buffer.substring(endOfMessageIndex + 2); // +2 to remove the newline characters
+
+            if (rawMessage.startsWith('data: ')) {
+              const payload = rawMessage.slice(6, rawMessage.length);
+              // console.log({ payload });
+              if (!payload.startsWith('[DONE]')) {
+                requestUsage.completionTokens += 1;
+                try {
+                  const message = JSON.parse(payload);
+                  if (message.error) {
+                    console.error(new Date(), 'openai error', message.error);
+                    onError(message.error);
+                  } else {
+                    onChunk(message);
+                  }
+                } catch (e) {
+                  logger.info('payload: ', payload);
+                  logger.error(
+                    'error parsing data chunk as json',
+                    e,
+                    rawMessage
+                  );
+                }
+              } else {
+                announceEnd();
+              }
+            } else if (rawMessage.length > 0) {
+              // console.log('non data chunk', rawMessage);
+              nonDataChunks.push(rawMessage);
+            } else if (nonDataChunks.length > 0) {
+              // console.log('empty line');
+              const joinedChunks = nonDataChunks.join('\n');
               try {
-                const message = JSON.parse(payload);
-                if (message.error) {
-                  console.error(new Date(), 'openai error', message.error);
-                  onError(message.error);
-                } else {
-                  onChunk(message);
+                const parsedJSON = JSON.parse(joinedChunks);
+                if (parsedJSON.error) {
+                  onError(parsedJSON.error);
                 }
               } catch (e) {
-                logger.info('payload: ', payload);
-                logger.error('error parsing data chunk as json', e, rawMessage);
+                logger.error(
+                  'error parsing non-data chunk as json',
+                  e,
+                  joinedChunks
+                );
               }
-            } else {
-              announceEnd();
+              nonDataChunks = [];
             }
-          } else if (rawMessage.length > 0) {
-            console.log('non data chunk', rawMessage);
-            nonDataChunks.push(rawMessage);
-          } else if (nonDataChunks.length > 0) {
-            console.log('empty line');
-            const joinedChunks = nonDataChunks.join('\n');
-            try {
-              const parsedJSON = JSON.parse(joinedChunks);
-              if (parsedJSON.error) {
-                onError(parsedJSON.error);
-              }
-            } catch (e) {
-              logger.error(
-                'error parsing non-data chunk as json',
-                e,
-                joinedChunks
-              );
-            }
-            nonDataChunks = [];
+            endOfMessageIndex = buffer.indexOf('\n\n');
           }
-          endOfMessageIndex = buffer.indexOf('\n\n');
-        }
-      });
+        });
+      }
     });
 
     req.on('error', (e) => {
+      console.log('on error');
       reject(e);
     });
     const payload = JSON.stringify({
@@ -328,7 +444,7 @@ export async function startCompletion({
       functions,
       stream: true,
       temperature,
-      // max_tokens: 100,
+      max_tokens: max_tokens,
       user,
     });
     // fs.writeFileSync('payload.json', payload);
@@ -353,7 +469,7 @@ export async function startCompletionSimplified(
       });
       res.on('data', (d) => {
         const rawChunk = d.toString('utf-8');
-        console.log(rawChunk);
+        // console.log('rawChunk', rawChunk);
         const lines = rawChunk.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -361,7 +477,7 @@ export async function startCompletionSimplified(
             if (!dataChunk.startsWith('[DONE]')) {
               // console.log('Data chunk:', dataChunk);
             } else {
-              console.log('DONE');
+              // console.log('DONE');
               resolve();
             }
           }

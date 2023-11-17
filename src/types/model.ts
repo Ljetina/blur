@@ -7,7 +7,14 @@ export type ModelId = 'gpt-3.5-turbo' | 'gpt-4';
  */
 export interface Message {
   role: string;
-  content: string | null;
+  content:
+    | string
+    | null
+    | {
+        type: string;
+        text?: string;
+        image_url?: { url: string, detail?: 'high' | 'low' | 'auto' };
+      }[];
   compressed_content?: string;
   name?: string;
   function_call?: {
