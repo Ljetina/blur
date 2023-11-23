@@ -12,12 +12,12 @@ export function tokenLimitNotebook(input: string) {
   const tokenCount = countTokens(input);
   const notebook = JSON.parse(input);
   let selectedNotebookContent = input;
-  if (tokenCount > 1500) {
+  if (tokenCount > 3000) {
     let selectedCells = notebook.slice(0, 2);
     selectedCells.push(notebook[notebook.length - 1]);
     for (let i = notebook.length - 2; i >= 2; i--) {
       let potentialCells = selectedCells.concat(notebook[i]);
-      if (countTokens(JSON.stringify(potentialCells)) <= 1500) {
+      if (countTokens(JSON.stringify(potentialCells)) <= 3000) {
         selectedCells = potentialCells;
       } else {
         break;
@@ -32,7 +32,7 @@ export function tokenLimitNotebook(input: string) {
 export function tokenLimitConversationHistory(
   messages: Message[],
   tokenBudget = 4000,
-  messageLimit = 10
+  messageLimit = 30
 ) {
   const encodingLengths = messages.map((m) => {
     const contentToCount: string = m.function_call
@@ -82,7 +82,7 @@ export function tokenLimitConversationHistory(
     filteredMessages
       .filter((m) => typeof m.content == 'string')
       // @ts-ignore
-      .map((m) => m.content?.substring(0, 20) || m.name)
+      .map((m) => m.content?.substring(0, 200) || m.name)
   );
 
   return filteredMessages;
@@ -94,7 +94,8 @@ export function countInputTokens(messages: Message[], functions?: Function[]) {
     if (Array.isArray(message.content)) {
       for (const content of message.content) {
         if (content.type === 'text') {
-          inputTokenCount += encoding.encode(message.role + ' ' + content.text).length + 4;
+          inputTokenCount +=
+            encoding.encode(message.role + ' ' + content.text).length + 4;
         } else if (content.type === 'image_url') {
           if (content?.image_url?.detail === 'high') {
             inputTokenCount += 129; // high detail image tokens
@@ -104,7 +105,8 @@ export function countInputTokens(messages: Message[], functions?: Function[]) {
         }
       }
     } else if (typeof message.content === 'string') {
-      inputTokenCount += encoding.encode(message.role + ' ' + message.content).length + 4;
+      inputTokenCount +=
+        encoding.encode(message.role + ' ' + message.content).length + 4;
     }
   }
   inputTokenCount -= messages.length;
