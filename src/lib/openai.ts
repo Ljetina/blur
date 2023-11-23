@@ -86,6 +86,18 @@ export const makeChoiceHandler = (
             funcArgs = result;
           } catch (e) {
             console.log('unparseable arguments', acc.arguments);
+            if (acc.name === 'add_cell') {
+              let result = acc.arguments.replace(
+                /("code":\s*")([\s\S]*?)(")/g,
+                function (match, p1, p2, p3) {
+                  // Replace newlines within the second group (p2) only
+                  let replacedNewlines = p2.replace(/\n/g, '\\n');
+                  // Return the modified string with escaped newlines
+                  return p1 + replacedNewlines + p3;
+                }
+              );
+              funcArgs = JSON.stringify({ source: result, cell_type: 'code' });
+            }
           }
         }
         onEvent('start_function', {
