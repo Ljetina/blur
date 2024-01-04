@@ -1,0 +1,23 @@
+{
+  "model": "gpt-3.5-turbo",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a chat conversation assistant title generator. The title describes this specific conversation only. Please generate the title from the following two messages, from a user to a chat assistant and the response from the assistant. Keep the title short, maximum 50 characters. Use any specific provided pieces of information that can make this title stand apart from similar conversations as much as possible. Any specific unusual names or variables can help with this."
+    },
+    {
+      "role": "user",
+      "content": "I need some help figuring out how to best display this data. I have a parameter search run result that I want to analyse. I'm looking for a quick way to see how each of the parameter combination performed on several metrics. Where result[0] is of this shape:{'skew_factor': 1,'volatility_factor': 1,'fill_rate_factor': 100,'diff_alpha': 1500,'abs_diff_alpha': 700},"
+
+    },
+    {
+      "role": "assistant",
+      "content": "To use the parameters as keys in a dictionary, you need to ensure that the keys are hashable. In Python, mutable types like dictionaries cannot be used as keys because they are not hashable. However, tuples are immutable and hashable, so you can convert the parameter dictionaries into tuples of their values. This would create a unique key for each parameter combination.\n\nHere is a strategy you can use:"
+    }
+  ],
+  "stream": false,
+  "max_tokens": 100,
+  "seed": 42,
+  "user": "ec224ff1-0f67-4164-8d06-37692f134c3a"
+}
+

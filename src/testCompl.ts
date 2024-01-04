@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { startCompletionSimplified } from './lib/openai';
 
-const payload = fs.readFileSync('./payload.json');
+const payload = fs.readFileSync('./title_payload.json');
 let stringPayload = payload.toString();
 const parsedPayload = JSON.parse(stringPayload);
 

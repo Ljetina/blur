@@ -1,0 +1,21 @@
+{
+  "model": "gpt-3.5-turbo",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a chat conversation assistant title generator. The title describes this specific conversation only. Please generate the title from the following two messages, from a user to a chat assistant and the response from the assistant. Keep the title short, maximum 20 characters. Use any specific provided pieces of information that can make this title stand apart from similar conversations as much as possible. Any specific unusual names or variables can help with this."
+    },
+    {
+      "role": "user",
+      "content": "javascript regex to match string between \"code\": \"match this string\""
+    },
+    {
+      "role": "assistant",
+      "content": "To match a string between \"code\": \" and \", you can use a regular expression (regex) in JavaScript. The regex would look something like this:"
+    }
+  ],
+  "stream": false,
+  "max_tokens": 100,
+  "seed": 42,
+  "user": "ec224ff1-0f67-4164-8d06-37692f134c3a"
+}
