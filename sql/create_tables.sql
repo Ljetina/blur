@@ -137,7 +137,7 @@ CREATE TABLE jupyter_settings
     id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id               UUID REFERENCES users (id) ON DELETE CASCADE,
     host                  VARCHAR(255),
-    port                  INTEGER,
+    port                  VARCHAR(255),
     token                 VARCHAR(255),
     notebooks_folder_path VARCHAR(255)
 );
