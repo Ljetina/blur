@@ -405,6 +405,21 @@ export async function storeMessages(messages: InputMessage[]) {
   return resp.rows;
 }
 
+export async function storeConversationName(conversation_name: string, conversation_id: string) {
+  const resp = await withDbClient(
+    async (client) =>
+      await client.query(
+        `
+        UPDATE conversations
+        SET name = $1
+        WHERE id = $2
+        `,
+        [conversation_name, conversation_id]
+      )
+  );
+  return resp.rows[0];
+};
+
 export async function storeApiUsage({
   tenant_id,
   user_id,
@@ -506,4 +521,35 @@ export async function storeInvoiceIncreaseCredits({
   });
 
   return creditResp;
+}
+
+export async function countMessages(conversation_id: string) {
+  const resp = await withDbClient(
+    async (client) =>
+      await client.query(
+        `
+          SELECT COUNT(*)
+          FROM messages
+          WHERE conversation_id = $1;
+        `,
+        [conversation_id]
+      )
+  );
+  return resp.rows[0];
+}
+
+export async function getMessageForConversationName(conversation_id: string) {
+  const resp = await withDbClient(
+    async (client) =>
+      await client.query(
+        `
+          SELECT content
+          FROM messages
+          WHERE conversation_id = $1
+          LIMIT 1;
+        `,
+        [conversation_id]
+      )
+  );
+  return resp.rows[0];
 }

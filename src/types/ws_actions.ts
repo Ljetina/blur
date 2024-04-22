@@ -22,4 +22,5 @@ export type SERVER_ACTION =
   | 'response_error'
   | 'out_of_credits'
   | 'remaining_credits'
-  | 'credit_topup';
+  | 'credit_topup'
+  | 'conversation_name';
