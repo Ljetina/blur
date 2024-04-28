@@ -538,7 +538,7 @@ export async function countMessages(conversation_id: string) {
   return resp.rows[0];
 }
 
-export async function getMessageForConversationName(conversation_id: string) {
+export async function getMessagesForConversationId(conversation_id: string) {
   const resp = await withDbClient(
     async (client) =>
       await client.query(

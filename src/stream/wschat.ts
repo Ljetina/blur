@@ -12,7 +12,7 @@ import {
   storeMessages,
   updateSystemMemory,
   countMessages,
-  getMessageForConversationName,
+  getMessagesForConversationId,
   storeConversationName,
 } from '../lib/db';
 import { FRONTEND_FUNCTIONS } from '../lib/functions';
@@ -356,7 +356,7 @@ async function createConversationName(
   const { count: numOfMessages } = await countMessages(conversationId);
 
   if (numOfMessages == 2) {
-    const { content: messageForName } = await getMessageForConversationName(conversationId);
+    const { content: messageForName } = await getMessagesForConversationId(conversationId);
     const headers = {
       Authorization: 'Bearer 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',
       'Content-type': 'application/json',
@@ -365,7 +365,7 @@ async function createConversationName(
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: conversation.model_id,
+          model: 'gpt-3.5-turbo',
           messages: [
             {
               "role": "system",
