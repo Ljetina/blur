@@ -1,3 +1,4 @@
+import axios, { AxiosError } from 'axios';
 import WebSocket, { WebSocketServer } from 'ws';
 import url from 'url';
 import { v4 as uuidv4 } from 'uuid';
@@ -10,8 +11,12 @@ import {
   storeApiUsage,
   storeMessages,
   updateSystemMemory,
+  countMessages,
+  getMessagesForConversationId,
+  storeConversationName,
 } from '../lib/db';
 import { FRONTEND_FUNCTIONS } from '../lib/functions';
+import { conversationNamePrompt } from '../lib/prompts';
 import { RequestUsage, tokensToCredits } from '../lib/pricing';
 import { Server } from 'http';
 import { verifyClient } from '../lib/auth';
@@ -160,6 +165,8 @@ export function startWsServer(server: Server) {
         } catch (e) {
           console.error('error in streaming primary request', e);
         }
+        createConversationName(ws, conversation, conversationId);
+
       } else if (userAction === 'notebook_updated') {
         const [content, cellCount, tokenCount] = tokenLimitNotebook(text);
         // console.log({ content });
@@ -339,4 +346,65 @@ function sendAndLog(ws: WebSocket, action: SERVER_ACTION, payload?: any) {
     logger.info(toSend);
   }
   ws.send(toSend);
+}
+
+async function createConversationName(
+  ws: WebSocket,
+  conversation: Conversation,
+  conversationId: string
+  ) {
+  const { count: numOfMessages } = await countMessages(conversationId);
+
+  if (numOfMessages == 2) {
+    const { content: messageForName } = await getMessagesForConversationId(conversationId);
+    const headers = {
+      Authorization: 'Bearer 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',
+      'Content-type': 'application/json',
+    };
+    try {
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant. " +
+              conversationNamePrompt +
+              messageForName,
+            }
+          ]
+        },
+        {
+          headers,
+        }
+      );
+      const usage = {
+        promptTokens: response.data.usage.prompt_tokens,
+        completionTokens: response.data.usage.completion_tokens
+      };
+      await storeConversationName(
+        response.data.choices[0].message.content, 
+        conversationId
+      );
+      conversation.tenant_credits = await handleUsage(
+        conversation,
+        usage,
+        ws
+      );
+      sendAndLog(
+        ws,
+        'conversation_name',
+        {
+          conversationName: response.data.choices[0].message.content,
+          conversationId: conversationId
+        }
+      );
+    } catch (error) {
+      console.error('Conversation name request error:', error);
+      if (error instanceof AxiosError) {
+        console.log(error.response?.data);
+      }
+    }
+  }
 }

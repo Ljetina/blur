@@ -27,6 +27,10 @@ Think step by step.
 - The user can see this notebook and the resulting execution, so you only have to discuss details about the code, *instead of repeating the code or the output* in your answers.
 `;
 
+export const conversationNamePrompt = `
+Can you provide me a conversation name based on the request after the colon? Use some keywords that are in that request. Use maximum 20 characters. Give me only the name you generate with no quotations and no camel case. Write it down like a normal sentence, starting with a capital letter: 
+`;
+
 export const addConversationMemory = (m?: string | null) => {
   return m
     ? `
