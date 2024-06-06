@@ -354,18 +354,33 @@ async function createConversationName(
   conversationId: string
   ) {
   const { count: numOfMessages } = await countMessages(conversationId);
+  const openAIConfig = {
+    apiPath: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-3.5-turbo',
+    headers: {
+      Authorization: process.env.OPENAI_API_KEY,
+      'Content-type': 'application/json',
+    },
+  };
+  const groqConfig = {
+    apiPath: 'https://api.groq.com/openai/v1/chat/completions',
+    model: 'llama3-8b-8192',
+    headers: {
+      Authorization: process.env.GROQ_API_KEY,
+      'Content-type': 'application/json',
+    },
+  };
+  const apiConfig = conversation.model_id.startsWith('llama3') ? groqConfig : openAIConfig;
 
   if (numOfMessages == 2) {
     const { content: messageForName } = await getMessagesForConversationId(conversationId);
-    const headers = {
-      Authorization: 'Bearer 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',
-      'Content-type': 'application/json',
-    };
+    const headers = apiConfig.headers;
+
     try {
       const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
+        apiConfig.apiPath,
         {
-          model: 'gpt-3.5-turbo',
+          model: apiConfig.model,
           messages: [
             {
               "role": "system",

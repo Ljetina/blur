@@ -18,16 +18,29 @@ import {
 import { logger } from './log';
 import { RequestUsage } from './pricing';
 
-const options = {
+const openAIOptions = {
   hostname: 'api.openai.com',
   port: 443,
   path: '/v1/chat/completions',
   method: 'POST',
   headers: {
-    Authorization: 'Bearer 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',
+    Authorization: process.env.OPENAI_API_KEY,
     'Content-type': 'application/json',
   },
 };
+
+const groqOptions = {
+  hostname: 'api.groq.com',
+  port: 443,
+  path: '/openai/v1/chat/completions',
+  method: 'POST',
+  headers: {
+    Authorization: process.env.GROQ_API_KEY,
+    'Content-type': 'application/json',
+  },
+};
+
+const getOptions = (model_id: String) => model_id.startsWith('llama3') ? groqOptions : openAIOptions;
 
 interface Choice {
   index: number;
@@ -326,7 +339,11 @@ export async function startCompletion({
     | 'gpt-3.5-turbo'
     | 'gpt-4'
     | 'gpt-4-1106-preview'
-    | 'gpt-4-vision-preview';
+    | 'gpt-4-vision-preview'
+    | 'llama3-8b-8192'
+    | 'llama3-70b-8192';
+    // | 'mixtral-8x7b-32768'
+    // | 'gemma-7b-it';
   messages: Message[];
   functions?: Function[];
   user: string;
@@ -351,6 +368,7 @@ export async function startCompletion({
         resolve(requestUsage);
       }
     }
+    const options = getOptions(model);
     const req = https.request(options, (res) => {
       // console.log('status', res.statusCode, res.headers);
       const contentType = res.headers['content-type'];
@@ -472,6 +490,7 @@ export async function startCompletionSimplified(
   payload: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const options = openAIOptions;
     const req = https.request(options, (res) => {
       res.on('close', () => {
         console.log('openai close');
