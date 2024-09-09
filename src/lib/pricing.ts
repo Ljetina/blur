@@ -4,6 +4,10 @@ const modelToPrice = {
   'gpt-3.5-turbo': [0.0018, 0.0022],
   'gpt-4': [0.036, 0.072],
   'gpt-4-1106-preview': [0.012, 0.024],
+  'llama3-8b-8192': [0.0018, 0.0022],
+  'llama3-70b-8192': [0.012, 0.024],
+  // 'mixtral-8x7b-32768': [0.036, 0.072],
+  // 'gemma-7b-it': [0.0018, 0.0022],
 };
 
 export function centsToCredits(cents: number) {
