@@ -221,7 +221,7 @@ export async function getConversation(
   const resp = await withDbClient(
     async (client) =>
       await client.query(
-        `SELECT 
+        `SELECT
           conversations.id, 
           conversations.name, 
           conversations.prompt, 
